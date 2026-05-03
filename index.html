@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Ragdoll Clicker - Emergency Fix</title>
+    <title>Ragdoll Clicker - New Weapons</title>
     <style>
         body { margin: 0; background-color: #1a1a1b; color: white; font-family: 'Pretendard', sans-serif; overflow: hidden; user-select: none; cursor: crosshair; }
         #ui { position: absolute; top: 20px; left: 20px; pointer-events: none; z-index: 100; }
@@ -11,7 +11,6 @@
         #hp-bar-container { width: 100%; height: 12px; background: #333; border-radius: 6px; overflow: hidden; margin-top: 10px; border: 1px solid #555; }
         #hp-inner { width: 100%; height: 100%; background: linear-gradient(90deg, #ff4444, #ff8888); transition: width 0.2s; }
         
-        /* 오른쪽 메뉴 */
         .menu-wrapper { position: absolute; right: 0; top: 0; height: 100vh; display: flex; align-items: center; z-index: 200; }
         .side-menu { background: rgba(30, 30, 35, 0.98); width: 280px; height: 100vh; padding: 20px; border-left: 2px solid #444; box-sizing: border-box; display: none; }
         .side-menu.active { display: block; }
@@ -57,15 +56,12 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
-    function resize() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    }
+    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
     window.addEventListener('resize', resize);
     resize();
 
     let gold = 0, isDead = false, atkMultiplier = 1.0, upgradeCost = 500;
-    let particles = [], floatingTexts = [], explosions = [];
+    let particles = [], floatingTexts = [], explosions = [], bullets = [];
     let mouseX = canvas.width/2, mouseY = canvas.height/2;
     let lastAttackTime = Date.now();
     let dollLv = 1;
@@ -73,20 +69,21 @@
     let isGoldRush = false;
     let goldRushTimer = 0;
 
+    // --- 무기 데이터 업데이트 ---
     const weapons = {
         punch: { name: '기본 주먹', emoji: '👊', dmg: 20, price: 0, owned: true },
-        yumi: { name: '유미', emoji: '🐱', dmg: 75, price: 800, owned: false },
-        dagger: { name: '단검', emoji: '🗡️', dmg: 120, price: 2500, owned: false },
-        gear: { name: '톱니바퀴', emoji: '⚙️', dmg: 60, price: 5000, owned: false, isPlaced: true },
-        fire: { name: '화염구', emoji: '🔥', dmg: 280, price: 12000, owned: false, isFire: true },
-        bomb: { name: '폭탄', emoji: '💣', dmg: 1500, price: 30000, owned: false, isExplosive: true }
+        poison: { name: '독극물', emoji: '🧪', dmg: 15, price: 1500, owned: false, isPoison: true },
+        gun: { name: '권총', emoji: '🔫', dmg: 100, price: 6000, owned: false, isGun: true },
+        gear: { name: '톱니바퀴', emoji: '⚙️', dmg: 60, price: 10000, owned: false, isPlaced: true },
+        fire: { name: '화염구', emoji: '🔥', dmg: 350, price: 25000, owned: false, isFire: true },
+        bomb: { name: '폭탄', emoji: '💣', dmg: 2000, price: 60000, owned: false, isExplosive: true }
     };
     let currentWeapon = 'punch';
     let placedGear = null;
 
-    // 인형 데이터 및 좌표 복구
     let doll = {
-        x: canvas.width / 2, y: canvas.height / 2, vx: 0, vy: 0, charred: 0,
+        x: canvas.width / 2, y: canvas.height / 2, vx: 0, vy: 0, 
+        charred: 0, poisonStacks: 0,
         parts: {
             head: { rx: 0, ry: -120, r: 45, hp: 150, max: 150, active: true },
             body: { rx: 0, ry: 0, w: 100, h: 140, hp: 500, max: 500, active: true },
@@ -97,7 +94,8 @@
         }
     };
 
-    const screams = ["아야!", "형진이 아파!", "그만해!", "악!", "너무해!"];
+    // --- 1. 피격 대사 추가 ---
+    const screams = ["아야!", "형진이 아파!", "그만해!", "악!", "난 게이일 뿐이야", "너무해!", "멈춰줘!"];
     const taunts = ["간지러운데?", "고작 그정도?", "졸려..", "ㅋ", "안맞쥬?"];
 
     function toggleMenu(id) {
@@ -147,17 +145,21 @@
         const finalDmg = dmg * atkMultiplier;
         part.hp -= finalDmg;
 
-        // 골드러쉬 배율
         let g = finalDmg * 1.5;
         if (isGoldRush) g *= 2;
         gold += g;
 
-        // 반동 물리
+        // 물리 반동
         let ang = Math.atan2(doll.y + part.ry - y, doll.x + part.rx - x);
-        doll.vx += Math.cos(ang) * 10;
-        doll.vy += Math.sin(ang) * 10;
+        doll.vx += Math.cos(ang) * (isAuto ? 2 : 10);
+        doll.vy += Math.sin(ang) * (isAuto ? 2 : 10);
 
         if (weapons[currentWeapon].isFire) doll.charred = Math.min(1, doll.charred + 0.05);
+        
+        // --- 2. 독 시스템 (도트 데미지 중첩) ---
+        if (weapons[currentWeapon].isPoison) {
+            doll.poisonStacks = Math.min(50, doll.poisonStacks + 2);
+        }
 
         if (part.hp <= 0) {
             if (key === 'body') {
@@ -166,11 +168,10 @@
                 setTimeout(respawn, 1500);
             } else {
                 part.active = false;
-                spawnText(x, y, "파괴!", "#ffff00");
             }
         }
 
-        if (!isAuto && Math.random() < 0.4) {
+        if (!isAuto && Math.random() < 0.3) {
             spawnText(doll.x, doll.y - 150, screams[Math.floor(Math.random()*screams.length)], "#ff4444");
         }
         createBlood(x, y, isAuto ? 2 : 10);
@@ -181,7 +182,7 @@
         dollLv++;
         document.getElementById('doll-lv').innerText = dollLv;
         doll.x = canvas.width / 2; doll.y = canvas.height / 2;
-        doll.vx = 0; doll.vy = 0; doll.charred = 0;
+        doll.vx = 0; doll.vy = 0; doll.charred = 0; doll.poisonStacks = 0;
         for (let k in doll.parts) {
             doll.parts[k].max *= 1.3;
             doll.parts[k].hp = doll.parts[k].max;
@@ -191,20 +192,31 @@
 
     function createBlood(x, y, count) {
         for(let i=0; i<count; i++) {
-            particles.push({x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, life: 1, r: Math.random()*3+2});
+            particles.push({x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, life: 1, r: Math.random()*3+2, color: doll.poisonStacks > 5 ? "#44ff44" : "#ff0000"});
         }
     }
 
     canvas.addEventListener('mousedown', (e) => {
         if (e.clientX > canvas.width - 300) return;
         
-        // 골드러쉬 체크
         const now = Date.now();
         clickHistory.push(now);
         clickHistory = clickHistory.filter(t => now - t < 1000);
         if (clickHistory.length >= 10 && !isGoldRush) {
             isGoldRush = true; goldRushTimer = 300;
             document.getElementById('gold-rush-ui').style.display = 'block';
+        }
+
+        // --- 2. 총 무기 로직 (투사체 생성) ---
+        if (weapons[currentWeapon].isGun) {
+            const angle = Math.atan2(doll.y - e.clientY, doll.x - e.clientX);
+            bullets.push({
+                x: e.clientX, y: e.clientY,
+                vx: Math.cos(angle) * 25,
+                vy: Math.sin(angle) * 25,
+                dmg: weapons.gun.dmg
+            });
+            return;
         }
 
         if (weapons[currentWeapon].isPlaced) {
@@ -226,25 +238,46 @@
         }
     });
 
-    window.addEventListener('mousemove', (e) => { mouseX = e.clientX; mouseY = e.clientY; });
-
     function update() {
         if (!isDead) {
-            doll.vy += 0.5; // 중력
+            doll.vy += 0.5;
             doll.x += doll.vx; doll.y += doll.vy;
             doll.vx *= 0.95; doll.vy *= 0.95;
 
-            // 화면 이탈 방지
+            // 도트 데미지 처리 (독)
+            if (doll.poisonStacks > 0) {
+                applyDamage('body', doll.poisonStacks * 0.1, doll.x, doll.y, true);
+                doll.poisonStacks -= 0.05;
+            }
+
             if (doll.x < 100) { doll.x = 100; doll.vx *= -0.5; }
             if (doll.x > canvas.width - 350) { doll.x = canvas.width - 350; doll.vx *= -0.5; }
             if (doll.y > canvas.height - 150) { doll.y = canvas.height - 150; doll.vy *= -0.5; }
-            if (doll.y < 100) { doll.y = 100; doll.vy *= 0; }
 
-            // 도발 대사
             if (Date.now() - lastAttackTime > 3000 && Math.random() < 0.01) {
                 spawnText(doll.x, doll.y - 150, taunts[Math.floor(Math.random()*taunts.length)], "#ffffff");
                 lastAttackTime = Date.now();
             }
+        }
+
+        // --- 2. 총알 물리 및 충돌 처리 ---
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            let b = bullets[i];
+            b.x += b.vx; b.y += b.vy;
+            
+            for (let k in doll.parts) {
+                const p = doll.parts[k];
+                if (!p.active) continue;
+                const px = doll.x + p.rx, py = doll.y + p.ry;
+                const hit = p.r ? Math.hypot(b.x - px, b.y - py) < p.r :
+                                 (b.x > px - p.w/2 && b.x < px + p.w/2 && b.y > py - p.h/2 && b.y < py + p.h/2);
+                if (hit) {
+                    applyDamage(k, b.dmg, b.x, b.y);
+                    bullets.splice(i, 1);
+                    break;
+                }
+            }
+            if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) bullets.splice(i, 1);
         }
 
         if (isGoldRush) {
@@ -252,7 +285,6 @@
             if (goldRushTimer <= 0) { isGoldRush = false; document.getElementById('gold-rush-ui').style.display = 'none'; }
         }
 
-        // 톱니바퀴 자동 공격
         if (placedGear && weapons[currentWeapon].isPlaced) {
             if (Date.now() - placedGear.lastHit > 500) {
                 for(let k in doll.parts) {
@@ -261,7 +293,7 @@
                     if (d < 100) { applyDamage(k, weapons.gear.dmg, placedGear.x, placedGear.y, true); placedGear.lastHit = Date.now(); break; }
                 }
             }
-        } else { placedGear = null; }
+        }
     }
 
     function draw() {
@@ -274,13 +306,14 @@
             const px = doll.x + p.rx, py = doll.y + p.ry;
             
             let r = 224 - (doll.charred * 180), g = 172 - (doll.charred * 150), b = 105 - (doll.charred * 90);
+            if (doll.poisonStacks > 10) { g += 50; r -= 30; b -= 30; } // 중독 시 초록색 효과
+            
             ctx.fillStyle = isDead ? "#444" : `rgb(${r},${g},${b})`;
             ctx.strokeStyle = "#000"; ctx.lineWidth = 3;
 
             if (p.r) {
                 ctx.beginPath(); ctx.arc(px, py, p.r, 0, Math.PI*2); ctx.fill(); ctx.stroke();
                 if (k === 'head') {
-                    // 이름과 표정
                     ctx.fillStyle = "white"; ctx.font = "bold 18px sans-serif"; ctx.textAlign = "center";
                     ctx.fillText("형진이", px, py - 60);
                     ctx.fillStyle = "#000";
@@ -297,12 +330,14 @@
             }
         }
 
-        // 톱니바퀴
-        if (placedGear) {
-            ctx.font = "50px Arial"; ctx.fillText("⚙️", placedGear.x, placedGear.y + 15);
-        }
+        // 총알 그리기
+        ctx.fillStyle = "#ffcc00";
+        bullets.forEach(b => {
+            ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2); ctx.fill();
+        });
 
-        // 이펙트/커서
+        if (placedGear) { ctx.font = "50px Arial"; ctx.fillText("⚙️", placedGear.x, placedGear.y + 15); }
+
         explosions.forEach((e, i) => {
             ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI*2);
             ctx.fillStyle = `rgba(255,100,0,${e.life})`; ctx.fill();
@@ -312,10 +347,11 @@
 
         particles.forEach((p, i) => {
             p.x += p.vx; p.y += p.vy; p.life -= 0.02;
-            ctx.fillStyle = `rgba(200,0,0,${p.life})`;
+            ctx.fillStyle = p.color || "red"; ctx.globalAlpha = p.life;
             ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
             if(p.life <= 0) particles.splice(i, 1);
         });
+        ctx.globalAlpha = 1;
 
         floatingTexts.forEach((t, i) => {
             ctx.globalAlpha = t.life; ctx.fillStyle = t.color; ctx.font = "bold 25px sans-serif";
