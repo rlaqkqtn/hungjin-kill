@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Ragdoll Clicker - Multi-Target Edition</title>
+    <title>Ragdoll Clicker - Bug Fix Edition</title>
     <style>
         body { margin: 0; background-color: #1a1a1b; color: white; font-family: 'Pretendard', sans-serif; overflow: hidden; user-select: none; cursor: none; }
         #custom-cursor { position: fixed; top: 0; left: 0; font-size: 60px; pointer-events: none; z-index: 999; transform: translate(-50%, -50%); will-change: transform; }
@@ -39,7 +39,7 @@
 <div id="ui">
     <div class="stat-container">
         <div class="stat">💰 <span id="gold">0</span></div>
-        <div style="font-size: 13px; color: #aaa;">인형 수: <span id="doll-count">1</span>명 (Lv.<span id="doll-lv">1</span>)</div>
+        <div style="font-size: 13px; color: #aaa;">형진이 부대: <span id="doll-count">1</span>명 (Lv.<span id="doll-lv">1</span>)</div>
     </div>
 </div>
 
@@ -83,15 +83,14 @@
     const screams = ["아야!", "형진이 아파!", "그만해!", "악!", "살려줘!", "멈춰!", "히익!", "오마이갓!"];
 
     const weapons = {
-        punch: { name: '주먹', emoji: '👊', dmg: 25, price: 0, owned: true },
-        poison: { name: '독극물', emoji: '🧪', dmg: 15, price: 2000, owned: false, isPoison: true },
+        punch: { name: '주먹', emoji: '👊', dmg: 30, price: 0, owned: true },
+        poison: { name: '독극물', emoji: '🧪', dmg: 10, price: 2000, owned: false, isPoison: true },
         fire: { name: '화염구', emoji: '🔥', dmg: 400, price: 15000, owned: false, isFire: true },
-        gun: { name: '권총', emoji: '🔫', dmg: 300, price: 50000, owned: false, isGun: true },
-        bomb: { name: '폭탄', emoji: '💣', dmg: 10000, price: 150000, owned: false, isExplosive: true }
+        gun: { name: '권총', emoji: '🔫', dmg: 500, price: 50000, owned: false, isGun: true },
+        bomb: { name: '폭탄', emoji: '💣', dmg: 12000, price: 150000, owned: false, isExplosive: true }
     };
     let currentWeapon = 'punch';
 
-    // 인형 생성기
     class Doll {
         constructor() {
             this.x = Math.random() * (canvas.width - 400) + 200;
@@ -100,7 +99,7 @@
             this.vy = (Math.random() - 0.5) * 10;
             this.charred = 0;
             this.poisonStacks = 0;
-            this.hp = 1000 * Math.pow(1.3, dollLv - 1);
+            this.hp = 1200 * Math.pow(1.3, dollLv - 1);
             this.maxHp = this.hp;
             this.parts = {
                 head: { rx: 0, ry: -120, r: 45 },
@@ -113,7 +112,7 @@
         }
 
         update() {
-            this.vy += 0.6; // 중력
+            this.vy += 0.6;
             this.x += this.vx; this.y += this.vy;
             this.vx *= 0.98; this.vy *= 0.98;
 
@@ -122,30 +121,39 @@
             if (this.y > canvas.height - 180) { this.y = canvas.height - 180; this.vy *= -0.8; }
             if (this.y < 100) { this.y = 100; this.vy *= -0.7; }
 
+            // 독 데미지 시 골드 획득 로직 복구
             if (this.poisonStacks > 0) {
-                this.hp -= this.poisonStacks * 0.2;
+                const poisonDmg = this.poisonStacks * 0.2;
+                this.hp -= poisonDmg;
+                gold += poisonDmg * (isGoldRush ? 5 : 1); // 독 데미지도 돈을 줌
                 this.poisonStacks -= 0.05;
-                if (Math.random() < 0.1) createBlood(this.x, this.y, 1, "#44ff44");
+                if (Math.random() < 0.05) createBlood(this.x, this.y, 1, "#44ff44");
             }
             if (this.hp <= 0) this.respawn();
         }
 
         respawn() {
-            gold += 5000 * dollLv;
-            floatingTexts.push({ x: this.x, y: this.y, text: `KO! +${(5000*dollLv).toLocaleString()}G`, color: "#ff4444", life: 2.0 });
-            this.hp = this.maxHp * 1.2;
+            gold += 10000 * dollLv;
+            floatingTexts.push({ x: this.x, y: this.y, text: `형진이 검거! +${(10000*dollLv).toLocaleString()}G`, color: "#ff4444", life: 2.0 });
+            this.hp = this.maxHp * 1.3;
             this.maxHp = this.hp;
             this.charred = 0; this.poisonStacks = 0;
-            this.vx = (Math.random()-0.5)*20; this.vy = -20;
+            this.vx = (Math.random()-0.5)*30; this.vy = -25;
         }
 
         draw() {
             ctx.save();
             ctx.translate(this.x, this.y);
             
-            // 체력바 (인형 머리 위)
-            ctx.fillStyle = "#333"; ctx.fillRect(-50, -180, 100, 8);
-            ctx.fillStyle = "#ff4444"; ctx.fillRect(-50, -180, (this.hp/this.maxHp)*100, 8);
+            // 2. 형진이 이름 표시 복구
+            ctx.fillStyle = "white";
+            ctx.font = "bold 20px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText("형진이", 0, -195);
+
+            // 체력바
+            ctx.fillStyle = "#333"; ctx.fillRect(-50, -185, 100, 6);
+            ctx.fillStyle = "#ff4444"; ctx.fillRect(-50, -185, (this.hp/this.maxHp)*100, 6);
 
             for (let k in this.parts) {
                 const p = this.parts[k];
@@ -186,51 +194,50 @@
     function upgradeAtk() {
         if (gold >= upgradeCost) {
             gold -= upgradeCost;
-            atkMultiplier += 0.5;
-            upgradeCost = Math.floor(upgradeCost * 1.8);
+            atkMultiplier += 0.6;
+            upgradeCost = Math.floor(upgradeCost * 1.9);
             updateUI();
         }
     }
 
     function createExplosion(x, y) {
-        explosions.push({ x, y, r: 10, maxR: 250, life: 1.0 });
-        for(let i=0; i<30; i++) {
-            particles.push({ x, y, vx: (Math.random()-0.5)*25, vy: (Math.random()-0.5)*25, life: 1, r: Math.random()*10+5, color: "#ffaa00" });
+        explosions.push({ x, y, r: 10, maxR: 280, life: 1.0 });
+        for(let i=0; i<40; i++) {
+            particles.push({ x, y, vx: (Math.random()-0.5)*30, vy: (Math.random()-0.5)*30, life: 1.2, r: Math.random()*12+6, color: "#ff8800" });
         }
-        // 화면 흔들림 효과
-        canvas.style.transform = `translate(${(Math.random()-0.5)*20}px, ${(Math.random()-0.5)*20}px)`;
+        canvas.style.transform = `translate(${(Math.random()-0.5)*30}px, ${(Math.random()-0.5)*30}px)`;
         setTimeout(() => canvas.style.transform = 'none', 100);
     }
 
     function applyDamage(targetDoll, dmg, x, y, isExplosion = false) {
         const finalDmg = dmg * atkMultiplier;
         targetDoll.hp -= finalDmg;
-        const earned = Math.floor(finalDmg * (isGoldRush ? 10 : 2));
+        const earned = Math.floor(finalDmg * (isGoldRush ? 10 : 2.5));
         gold += earned;
 
-        if (weapons[currentWeapon].isFire) targetDoll.charred = Math.min(1, targetDoll.charred + 0.1);
-        if (weapons[currentWeapon].isPoison) targetDoll.poisonStacks = Math.min(100, targetDoll.poisonStacks + 5);
+        if (weapons[currentWeapon].isFire) targetDoll.charred = Math.min(1, targetDoll.charred + 0.08);
+        if (weapons[currentWeapon].isPoison) targetDoll.poisonStacks = Math.min(100, targetDoll.poisonStacks + 6);
 
         let ang = Math.atan2(targetDoll.y - y, targetDoll.x - x);
-        targetDoll.vx += Math.cos(ang) * (isExplosion ? 50 : 15);
-        targetDoll.vy += Math.sin(ang) * (isExplosion ? 50 : 15);
+        targetDoll.vx += Math.cos(ang) * (isExplosion ? 60 : 18);
+        targetDoll.vy += Math.sin(ang) * (isExplosion ? 60 : 18);
 
         floatingTexts.push({ x: x, y: y, text: `+${earned.toLocaleString()}G`, color: isGoldRush ? "#fff" : "#ffcc00", life: 1.0 });
-        if (Math.random() < 0.2) floatingTexts.push({ x: targetDoll.x, y: targetDoll.y - 150, text: screams[Math.floor(Math.random()*screams.length)], color: "#ff4444", life: 1.2, isScream: true });
+        if (Math.random() < 0.25) floatingTexts.push({ x: targetDoll.x, y: targetDoll.y - 150, text: screams[Math.floor(Math.random()*screams.length)], color: "#ff4444", life: 1.2, isScream: true });
         
-        createBlood(x, y, isExplosion ? 15 : 5, targetDoll.poisonStacks > 20 ? "#44ff44" : "#ff0000");
+        createBlood(x, y, isExplosion ? 20 : 6, targetDoll.poisonStacks > 20 ? "#44ff44" : "#ff0000");
     }
 
     function createBlood(x, y, count, color) {
         for(let i=0; i<count; i++) {
-            particles.push({ x, y, vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15, life: 1, r: Math.random()*4+2, color });
+            particles.push({ x, y, vx: (Math.random()-0.5)*18, vy: (Math.random()-0.5)*18, life: 1, r: Math.random()*5+2, color });
         }
     }
 
+    // 3. 총기 발사 로직 전면 수정
     canvas.addEventListener('mousedown', (e) => {
         if (e.clientX > canvas.width - 300) return;
 
-        // 골드러쉬 로직
         const now = Date.now();
         clickHistory.push(now);
         clickHistory = clickHistory.filter(t => now - t < 1000);
@@ -239,18 +246,33 @@
             goldRushUI.style.display = 'block';
         }
 
-        // 폭탄 임팩트 로직
-        if (weapons[currentWeapon].isExplosive) {
-            createExplosion(mouseX, mouseY);
+        if (currentWeapon === 'gun') {
+            // 마우스 클릭 위치에서 가장 가까운 인형 방향으로 발사
+            let target = dolls[0];
+            let minDist = Math.hypot(dolls[0].x - mouseX, dolls[0].y - mouseY);
             dolls.forEach(d => {
-                if (Math.hypot(d.x - mouseX, d.y - mouseY) < 300) applyDamage(d, weapons.bomb.dmg, mouseX, mouseY, true);
+                let dDist = Math.hypot(d.x - mouseX, d.y - mouseY);
+                if(dDist < minDist) { minDist = dDist; target = d; }
             });
+
+            const angle = Math.atan2(target.y - mouseY, target.x - mouseX);
+            bullets.push({ 
+                x: mouseX, y: mouseY, 
+                vx: Math.cos(angle) * 45, 
+                vy: Math.sin(angle) * 45, 
+                dmg: weapons.gun.dmg,
+                life: 100 
+            });
+            // 발사 반동 효과
+            cursor.style.transform = `translate(${mouseX}px, ${mouseY}px) scale(1.5) rotate(-20deg)`;
             return;
         }
 
-        if (weapons[currentWeapon].isGun) {
-            const angle = Math.atan2(dolls[0].y - mouseY, dolls[0].x - mouseX);
-            bullets.push({ x: mouseX, y: mouseY, vx: Math.cos(angle) * 40, vy: Math.sin(angle) * 40, dmg: weapons.gun.dmg });
+        if (weapons[currentWeapon].isExplosive) {
+            createExplosion(mouseX, mouseY);
+            dolls.forEach(d => {
+                if (Math.hypot(d.x - mouseX, d.y - mouseY) < 350) applyDamage(d, weapons.bomb.dmg, mouseX, mouseY, true);
+            });
             return;
         }
 
@@ -296,29 +318,43 @@
         dolls.forEach(d => d.update());
         dolls.forEach(d => d.draw());
 
-        // 폭발 그리기
+        // 총알 이동 및 충돌 체크
+        bullets.forEach((b, bi) => {
+            b.x += b.vx; b.y += b.vy;
+            ctx.fillStyle = "#fff";
+            ctx.beginPath(); ctx.arc(b.x, b.y, 6, 0, Math.PI*2); ctx.fill();
+            
+            dolls.forEach(d => {
+                if (Math.hypot(b.x - d.x, b.y - d.y) < 80) {
+                    applyDamage(d, b.dmg, b.x, b.y);
+                    bullets.splice(bi, 1);
+                }
+            });
+            if(b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) bullets.splice(bi, 1);
+        });
+
         explosions.forEach((ex, i) => {
             ctx.beginPath();
             let grad = ctx.createRadialGradient(ex.x, ex.y, 0, ex.x, ex.y, ex.r);
             grad.addColorStop(0, `rgba(255, 255, 255, ${ex.life})`);
-            grad.addColorStop(0.3, `rgba(255, 200, 0, ${ex.life})`);
+            grad.addColorStop(0.2, `rgba(255, 255, 0, ${ex.life})`);
+            grad.addColorStop(0.5, `rgba(255, 100, 0, ${ex.life*0.8})`);
             grad.addColorStop(1, `rgba(255, 0, 0, 0)`);
             ctx.fillStyle = grad;
-            ctx.arc(ex.x, ex.y, ex.r, 0, Math.PI*2);
-            ctx.fill();
-            ex.r += 15; ex.life -= 0.03;
+            ctx.arc(ex.x, ex.y, ex.r, 0, Math.PI*2); ctx.fill();
+            ex.r += 18; ex.life -= 0.04;
             if (ex.life <= 0) explosions.splice(i, 1);
         });
 
         particles.forEach((p, i) => {
             p.x += p.vx; p.y += p.vy; p.life -= 0.02;
-            ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
+            ctx.fillStyle = p.color; ctx.globalAlpha = Math.max(0, p.life);
             ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
             if(p.life <= 0) particles.splice(i, 1);
         });
 
         floatingTexts.forEach((t, i) => {
-            ctx.globalAlpha = t.life; ctx.fillStyle = t.color; 
+            ctx.globalAlpha = Math.max(0, t.life); ctx.fillStyle = t.color; 
             ctx.font = t.isScream ? "bold 32px sans-serif" : "bold 24px sans-serif";
             ctx.textAlign = "center";
             ctx.fillText(t.text, t.x, t.y); t.y -= 2; t.life -= 0.02;
