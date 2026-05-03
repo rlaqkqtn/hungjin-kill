@@ -2,16 +2,25 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Ragdoll Clicker - AI Update</title>
+    <title>Ragdoll Clicker - Sound & Map Update</title>
     <style>
         body { margin: 0; background-color: #050505; color: white; font-family: 'Arial', sans-serif; overflow: hidden; user-select: none; }
-        #ui { position: absolute; top: 20px; left: 20px; pointer-events: none; }
+        #ui { position: absolute; top: 20px; left: 20px; pointer-events: none; z-index: 10; }
         .stat { font-size: 32px; margin-bottom: 5px; color: #ff3333; text-shadow: 2px 2px 4px #000; font-weight: bold; }
-        #shop { position: absolute; right: 20px; top: 20px; background: rgba(30, 0, 0, 0.9); padding: 15px; border-radius: 15px; border: 3px solid #ff0000; width: 240px; }
+        #shop { position: absolute; right: 20px; top: 20px; background: rgba(30, 0, 0, 0.9); padding: 15px; border-radius: 15px; border: 3px solid #ff0000; width: 240px; z-index: 10; }
         .shop-title { margin: 0 0 10px 0; color: #ff0000; font-size: 22px; text-align: center; font-weight: bold; }
         button { width: 100%; padding: 12px; margin: 5px 0; cursor: pointer; background: #800; color: white; border: 2px solid #f00; font-size: 16px; font-weight: bold; border-radius: 8px; }
         button:hover { background: #b00; transform: scale(1.02); }
-        canvas { background: #0a0a0a; }
+        canvas { background: #111; display: block; }
+        /* 1. 맵 시각화 (중앙 격투장 느낌) */
+        #map-border {
+            position: absolute;
+            top: 50px; left: 50px;
+            right: 50px; bottom: 50px;
+            border: 5px dashed rgba(255, 0, 0, 0.3);
+            pointer-events: none;
+            border-radius: 30px;
+        }
     </style>
 </head>
 <body>
@@ -24,12 +33,13 @@
 <div id="shop">
     <div class="shop-title">무기 상점</div>
     <button onclick="addWeapon('🗡️', 100, 30)">칼 (100G)</button>
-    <button onclick="addWeapon('⚙️', 300, 20)">톱니바퀴 (300G)</button>
-    <button onclick="addWeapon('🔥', 800, 10)">화염방사기 (800G)</button>
+    <button onclick="addWeapon('⚙️', 300, 25)">톱니바퀴 (300G)</button>
+    <button onclick="addWeapon('🔥', 800, 15)">화염방사기 (800G)</button>
     <button onclick="addWeapon('💣', 1500, 200)">폭탄 (1500G)</button>
     <button onclick="addWeapon('🐈', 3000, 15, true)">유미 소환 (3000G)</button>
 </div>
 
+<div id="map-border"></div>
 <canvas id="gameCanvas"></canvas>
 
 <script>
@@ -47,6 +57,23 @@
     let floatingTexts = [];
     let draggedObj = null;
     let mouseX = 0, mouseY = 0;
+
+    // 2. 사운드 시스템 (Web Audio API 사용)
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playHitSound(frequency = 150, type = 'sine') {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.type = type;
+        oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.1);
+    }
 
     const quotes = ["악!", "살려줘!", "아야!", "그만해!", "제발!", "너무아파!", "도와줘!"];
 
@@ -72,15 +99,14 @@
         }
     }
 
-    // 2. 텍스트 출력 확률 및 가독성 대폭 강화
     function speak() {
-        if(Math.random() < 0.4) { // 확률 증가
+        if(Math.random() < 0.4) {
             floatingTexts.push({ 
                 x: doll.x + (Math.random()-0.5)*100, 
                 y: doll.y - 100, 
                 text: quotes[Math.floor(Math.random()*quotes.length)], 
                 life: 1.5,
-                color: Math.random() > 0.5 ? "#ffffff" : "#ff0000"
+                color: "#ff3333"
             });
         }
     }
@@ -89,21 +115,25 @@
         if (isDead) return;
         hp -= amount;
         gold += isClick ? 10 : amount * 0.5;
+        
+        // 타격 사운드 재생
+        if (isClick) playHitSound(200, 'square');
+        else if (Math.random() < 0.1) playHitSound(100, 'sine');
+
         if (Math.random() < 0.2) createBlood(x, y, 5);
         speak();
         if (hp <= 0) die();
     }
 
-    // 1. 아이템 크기 대폭 확대 (60px)
     function addWeapon(emoji, price, dmg, isYumi = false) {
         if(gold >= price) {
             gold -= price;
             weapons.push({
-                x: Math.random() * (canvas.width - 100) + 50,
-                y: Math.random() * (canvas.height - 100) + 50,
+                x: Math.random() * (canvas.width - 200) + 100,
+                y: Math.random() * (canvas.height - 200) + 100,
                 emoji: emoji, dmg: dmg, angle: 0,
                 isYumi: isYumi,
-                size: 60 // 크기 키움
+                size: 60
             });
         }
     }
@@ -111,6 +141,7 @@
     function die() {
         if (isDead) return;
         isDead = true; hp = 0;
+        playHitSound(50, 'sawtooth'); // 사망 사운드
         createBlood(doll.x, doll.y, 100);
         setTimeout(() => {
             isDead = false;
@@ -122,6 +153,7 @@
     }
 
     canvas.addEventListener('mousedown', (e) => {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
         let mx = e.clientX, my = e.clientY;
         draggedObj = weapons.find(w => Math.sqrt((mx-w.x)**2 + (my-w.y)**2) < 50);
         if(!draggedObj && !isDead) {
@@ -133,8 +165,7 @@
     });
 
     window.addEventListener('mousemove', (e) => {
-        mouseX = e.clientX;
-        mouseY = e.clientY;
+        mouseX = e.clientX; mouseY = e.clientY;
         if(draggedObj) {
             draggedObj.x = mouseX;
             draggedObj.y = mouseY;
@@ -146,37 +177,43 @@
     function render() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // 4. 인형이 마우스를 피해 도망가는 로직 강화
+        // 1. 도망 속도 조절 (0.8 -> 0.4로 하향) 및 맵 경계 제한
+        const margin = 100;
         if(!isDead && draggedObj !== doll) {
             let mDx = doll.x - mouseX;
             let mDy = doll.y - mouseY;
             let mDist = Math.sqrt(mDx*mDx + mDy*mDy);
             
-            if(mDist < 250) { // 마우스가 250px 내로 오면
-                doll.vx += (mDx / mDist) * 0.8;
-                doll.vy += (mDy / mDist) * 0.8;
+            if(mDist < 200) { 
+                doll.vx += (mDx / mDist) * 0.4; // 도망 속도 완화
+                doll.vy += (mDy / mDist) * 0.4;
             }
 
             doll.x += doll.vx; doll.y += doll.vy;
-            doll.vx *= 0.94; doll.vy *= 0.94;
+            doll.vx *= 0.92; doll.vy *= 0.92;
             doll.vy += 0.4; // 중력
 
-            if(doll.x < 50 || doll.x > canvas.width-50) doll.vx *= -0.8;
-            if(doll.y > canvas.height-80) { doll.y = canvas.height-80; doll.vy *= -0.5; }
+            // 맵 밖으로 나가지 못하게 바운스 처리
+            if(doll.x < margin) { doll.x = margin; doll.vx *= -0.5; }
+            if(doll.x > canvas.width - margin) { doll.x = canvas.width - margin; doll.vx *= -0.5; }
+            if(doll.y < margin) { doll.y = margin; doll.vy *= -0.5; }
+            if(doll.y > canvas.height - margin) { doll.y = canvas.height - margin; doll.vy *= -0.5; }
         }
 
-        // 3. 고양이 유미 AI 및 무기 처리
+        // 무기 및 고양이 AI
         weapons.forEach(w => {
             if(w.isYumi && !isDead && draggedObj !== w) {
-                // 고양이가 인형을 자동으로 쫓아감
                 let targetDx = doll.x - w.x;
                 let targetDy = doll.y - w.y;
                 let targetDist = Math.sqrt(targetDx*targetDx + targetDy*targetDy);
                 if(targetDist > 20) {
-                    w.x += (targetDx / targetDist) * 4;
-                    w.y += (targetDy / targetDist) * 4;
+                    w.x += (targetDx / targetDist) * 3;
+                    w.y += (targetDy / targetDist) * 3;
                 }
             }
+            // 무기 맵 제한
+            w.x = Math.max(margin, Math.min(canvas.width - margin, w.x));
+            w.y = Math.max(margin, Math.min(canvas.height - margin, w.y));
 
             ctx.font = `${w.size}px Arial`;
             ctx.save();
@@ -186,18 +223,16 @@
             ctx.restore();
 
             let d = Math.sqrt((w.x - doll.x)**2 + (w.y - doll.y)**2);
-            if(d < 80 && !isDead) {
-                applyDamage(w.dmg / 5, w.x, w.y, false);
-            }
+            if(d < 80 && !isDead) applyDamage(w.dmg / 5, w.x, w.y, false);
         });
 
-        // 인형 렌더링
+        // 인형 그리기
         ctx.save();
         ctx.translate(doll.x, doll.y);
         ctx.rotate(doll.angle);
         doll.parts.forEach(p => {
             if (!p.active) return;
-            ctx.fillStyle = isDead ? '#400' : '#e0ac69';
+            ctx.fillStyle = isDead ? '#444' : '#e0ac69';
             ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
             ctx.save();
             ctx.translate(p.rx, p.ry);
@@ -210,13 +245,13 @@
         });
         ctx.restore();
 
-        // 텍스트(비명) 렌더링 강화
+        // 텍스트 및 파티클
         floatingTexts.forEach((t, i) => {
             ctx.fillStyle = t.color;
             ctx.globalAlpha = t.life;
-            ctx.font = 'bold 35px Arial'; // 더 크게
+            ctx.font = 'bold 30px Arial';
             ctx.fillText(t.text, t.x, t.y);
-            t.y -= 1.5; t.life -= 0.015;
+            t.y -= 1; t.life -= 0.02;
             if(t.life <= 0) floatingTexts.splice(i, 1);
         });
         ctx.globalAlpha = 1;
