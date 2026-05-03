@@ -2,29 +2,45 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Ragdoll Clicker Professional</title>
+    <title>Ragdoll Clicker - 형진이 버전</title>
     <style>
-        body { margin: 0; background-color: #1a1a1a; color: white; font-family: 'Arial', sans-serif; overflow: hidden; user-select: none; }
+        body { 
+            margin: 0; 
+            background-color: #050505; /* 11. 배경 더 어둡게 */
+            color: white; 
+            font-family: 'Arial', sans-serif; 
+            overflow: hidden; 
+            user-select: none; 
+        }
         #ui { position: absolute; top: 20px; left: 20px; pointer-events: none; }
-        .stat { font-size: 20px; margin-bottom: 5px; color: #ffd700; text-shadow: 2px 2px 4px #000; }
-        #shop { position: absolute; right: 20px; top: 20px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; border: 2px solid #555; }
-        button { display: block; width: 150px; margin: 5px 0; padding: 8px; cursor: pointer; background: #333; color: white; border: 1px solid #777; }
-        button:hover { background: #555; }
-        canvas { background: #34495e; }
+        /* 12. 글씨 크기 대폭 확대 */
+        .stat { font-size: 32px; margin-bottom: 10px; color: #ff3333; text-shadow: 3px 3px 5px #000; font-weight: bold; }
+        #shop { 
+            position: absolute; right: 20px; top: 20px; 
+            background: rgba(20, 0, 0, 0.9); padding: 20px; 
+            border-radius: 15px; border: 3px solid #ff0000; 
+        }
+        button { 
+            display: block; width: 220px; margin: 10px 0; padding: 15px; 
+            cursor: pointer; background: #600; color: white; 
+            border: 2px solid #f00; font-size: 18px; font-weight: bold;
+        }
+        button:hover { background: #900; }
+        canvas { background: #0a0a0a; }
     </style>
 </head>
 <body>
 
 <div id="ui">
     <div class="stat">골드: <span id="gold">0</span>G</div>
-    <div class="stat">인형 체력: <span id="hp">100</span> / <span id="max-hp">100</span></div>
-    <div class="stat">레벨: <span id="lvl">1</span></div>
+    <div class="stat">형진이 체력: <span id="hp">100</span> / <span id="max-hp">100</span></div>
+    <div class="stat" style="color:#aaa">레벨: <span id="lvl">1</span></div>
 </div>
 
 <div id="shop">
-    <h4 style="margin:0 0 10px 0">아이템 상점</h4>
-    <button onclick="buyWeapon()">공격력 업 (+5) - 50G</button>
-    <button onclick="addSaw()">톱니바퀴 추가 - 300G</button>
+    <h3 style="margin:0 0 10px 0; color:#ff0000; font-size:24px;">고문 도구 상점</h3>
+    <button onclick="buyWeapon()">공격력 강화 - 50G</button>
+    <button onclick="addSaw()">톱니바퀴 설치 - 300G</button>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -42,20 +58,17 @@
     let dmg = 10;
     let skinColor = '#e0ac69';
 
-    // 게임 상태
     let particles = [];
     let saws = [];
     let floatingTexts = [];
-    let isDragging = false;
+    let isDraggingDoll = false;
+    let draggedSaw = null; // 13. 톱니바퀴 드래그용
 
-    // 대사 목록
-    const quotes = ["아야!", "그만해!", "Don't do that!", "정말 고통스러운!", "때리지마 난 게이일 뿐이라고", "윽..!", "제발.."];
+    const quotes = ["아야!", "그만해!", "Don't do that!", "정말 고통스러운!", "때리지마 난 게이일 뿐이라고", "형진이는 아프다..", "제발 살려줘!"];
 
-    // 인형 데이터 (관절 시스템 시뮬레이션용)
     let doll = {
         x: canvas.width / 2, y: canvas.height / 2,
-        vx: 0, vy: 0,
-        angle: 0,
+        vx: 0, vy: 0, angle: 0,
         parts: [
             { name: 'head', rx: 0, ry: -70, r: 25, active: true },
             { name: 'body', rx: 0, ry: 0, w: 45, h: 70, active: true },
@@ -66,36 +79,37 @@
         ]
     };
 
-    // 파티클(피) 시스템
-    function createBlood(x, y) {
-        for(let i=0; i<8; i++) {
+    // 14. 피 효과 대폭 강화
+    function createBlood(x, y, amount = 15) {
+        for(let i=0; i<amount; i++) {
             particles.push({
                 x, y,
-                vx: (Math.random()-0.5)*10,
-                vy: (Math.random()-0.5)*10,
-                life: 1.0,
-                color: '#ff0000'
+                vx: (Math.random()-0.5)*15,
+                vy: (Math.random()-0.5)*15,
+                r: Math.random()*5 + 2,
+                life: 1.5,
+                color: '#cc0000'
             });
         }
     }
 
-    // 말풍선 시스템
     function speak() {
-        if(Math.random() < 0.3) {
+        if(Math.random() < 0.4) {
             const text = quotes[Math.floor(Math.random() * quotes.length)];
-            floatingTexts.push({
-                x: doll.x, y: doll.y - 100,
-                text: text,
-                life: 1.0
-            });
+            floatingTexts.push({ x: doll.x, y: doll.y - 120, text: text, life: 1.2 });
         }
     }
 
-    // 인형 그리기 (관절부 강조 및 자세 변화)
     function drawDoll() {
         ctx.save();
         ctx.translate(doll.x, doll.y);
         ctx.rotate(doll.angle);
+
+        // 15. 인형 머리 위에 형진이라 써주기
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 24px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("형진", 0, -110);
 
         doll.parts.forEach(p => {
             if (!p.active) return;
@@ -105,75 +119,68 @@
 
             ctx.save();
             ctx.translate(p.rx, p.ry);
-            if(p.angle) ctx.rotate(p.angle + Math.sin(Date.now()*0.005)*0.2); // 흐느적거리는 효과
+            if(p.angle) ctx.rotate(p.angle + Math.sin(Date.now()*0.005)*0.3);
 
             if (p.name === 'head') {
-                ctx.beginPath();
-                ctx.arc(0, 0, p.r, 0, Math.PI*2);
-                ctx.fill(); ctx.stroke();
-                // 눈 그리기
+                ctx.beginPath(); ctx.arc(0, 0, p.r, 0, Math.PI*2); ctx.fill(); ctx.stroke();
                 ctx.fillStyle = '#000';
                 ctx.fillRect(-10, -5, 4, 4); ctx.fillRect(6, -5, 4, 4);
             } else {
                 ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
                 ctx.strokeRect(-p.w/2, -p.h/2, p.w, p.h);
-                // 연결부 구체 표현
-                ctx.fillStyle = '#555';
-                ctx.beginPath(); ctx.arc(0, -p.h/2, 5, 0, Math.PI*2); ctx.fill();
             }
             ctx.restore();
         });
         ctx.restore();
     }
 
-    // 톱니바퀴 그리기 및 충돌
     function drawSaws() {
         saws.forEach(s => {
-            s.angle += 0.1;
+            s.angle += 0.2;
             ctx.save();
             ctx.translate(s.x, s.y);
             ctx.rotate(s.angle);
-            ctx.fillStyle = '#95a5a6';
-            for(let i=0; i<8; i++) {
-                ctx.rotate(Math.PI/4);
-                ctx.fillRect(-10, -40, 20, 80);
+            ctx.fillStyle = '#7f8c8d';
+            for(let i=0; i<12; i++) { // 날개 수 증가
+                ctx.rotate(Math.PI/6);
+                ctx.fillRect(-5, -45, 10, 90);
             }
-            ctx.beginPath(); ctx.arc(0, 0, 25, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI*2); 
+            ctx.fillStyle = '#555'; ctx.fill();
             ctx.restore();
 
-            // 충돌 감지
+            // 16. 톱니바퀴 충돌 시 피 줄어듦 + 골드 수급 로직 수정
             let dist = Math.sqrt((s.x - doll.x)**2 + (s.y - doll.y)**2);
-            if(dist < 80) {
-                hp -= 0.5;
-                doll.vx += (doll.x - s.x) * 0.1;
-                doll.vy += (doll.y - s.y) * 0.1;
-                if(Math.random() < 0.1) createBlood(doll.x, doll.y);
+            if(dist < 90) {
+                hp -= 0.8;
+                gold += 0.2; // 톱니바퀴 데미지 시에도 골드 추가
+                doll.vx += (doll.x - s.x) * 0.15;
+                doll.vy += (doll.y - s.y) * 0.15;
+                if(Math.random() < 0.2) createBlood(doll.x, doll.y, 5);
                 if(hp <= 0) die();
             }
         });
     }
 
     function update() {
-        if(!isDragging) {
+        if(!isDraggingDoll) {
             doll.x += doll.vx;
             doll.y += doll.vy;
             doll.vx *= 0.98;
             doll.vy *= 0.98;
-            doll.vy += 0.2; // 중력
+            doll.vy += 0.3; // 중력 강화
 
-            if(doll.x < 50 || doll.x > canvas.width-50) doll.vx *= -0.8;
-            if(doll.y > canvas.height-100) { doll.y = canvas.height-100; doll.vy *= -0.5; }
+            if(doll.x < 50 || doll.x > canvas.width-50) doll.vx *= -0.7;
+            if(doll.y > canvas.height-80) { doll.y = canvas.height-80; doll.vy *= -0.4; }
         }
 
-        // 파티클 업데이트
         particles.forEach((p, i) => {
-            p.x += p.vx; p.y += p.vy; p.life -= 0.02;
+            p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life -= 0.015;
             if(p.life <= 0) particles.splice(i, 1);
         });
 
-        // 텍스트 업데이트
         floatingTexts.forEach((t, i) => {
-            t.y -= 1; t.life -= 0.01;
+            t.y -= 0.8; t.life -= 0.01;
             if(t.life <= 0) floatingTexts.splice(i, 1);
         });
 
@@ -183,45 +190,50 @@
         document.getElementById('lvl').innerText = level;
     }
 
-    // 마우스 이벤트 (잡기 및 때리기)
     canvas.addEventListener('mousedown', (e) => {
         let mx = e.clientX; let my = e.clientY;
-        let dist = Math.sqrt((mx - doll.x)**2 + (my - doll.y)**2);
         
-        if(dist < 100) {
-            isDragging = true;
-            hp -= dmg;
-            gold += 2;
-            createBlood(mx, my);
-            speak();
-            // 부위 절단
-            doll.parts.forEach(p => {
-                if(p.active && p.name !== 'body' && Math.random() < 0.05) {
-                    p.active = false;
-                    gold += 50;
-                }
-            });
-            if(hp <= 0) die();
+        // 13. 톱니바퀴 잡기 체크
+        draggedSaw = saws.find(s => Math.sqrt((mx-s.x)**2 + (my-s.y)**2) < 40);
+        
+        if(!draggedSaw) {
+            let dist = Math.sqrt((mx - doll.x)**2 + (my - doll.y)**2);
+            if(dist < 100) {
+                isDraggingDoll = true;
+                hp -= dmg;
+                gold += 5;
+                createBlood(mx, my, 20); // 피 더 많이
+                speak();
+                if(hp <= 0) die();
+            }
         }
     });
 
     window.addEventListener('mousemove', (e) => {
-        if(isDragging) {
+        if(draggedSaw) {
+            draggedSaw.x = e.clientX;
+            draggedSaw.y = e.clientY;
+        } else if(isDraggingDoll) {
+            doll.vx = (e.clientX - doll.x) * 0.5;
+            doll.vy = (e.clientY - doll.y) * 0.5;
             doll.x = e.clientX;
             doll.y = e.clientY;
-            doll.vx = 0; doll.vy = 0;
         }
     });
 
-    window.addEventListener('mouseup', () => { isDragging = false; });
+    window.addEventListener('mouseup', () => { 
+        isDraggingDoll = false; 
+        draggedSaw = null; 
+    });
 
     function die() {
-        level++; gold += 150; maxHp *= 1.4; hp = maxHp;
+        level++; gold += 200; maxHp = Math.floor(maxHp * 1.5); hp = maxHp;
         doll.parts.forEach(p => p.active = true);
         doll.x = canvas.width/2; doll.y = 200;
+        createBlood(doll.x, doll.y, 50); // 죽을 때 피 폭발
     }
 
-    function buyWeapon() { if(gold >= 50) { gold -= 50; dmg += 5; } }
+    function buyWeapon() { if(gold >= 50) { gold -= 50; dmg += 8; } }
     function addSaw() { if(gold >= 300) { gold -= 300; saws.push({x: Math.random()*canvas.width, y: Math.random()*canvas.height, angle:0}); } }
 
     function render() {
@@ -230,17 +242,15 @@
         drawSaws();
         drawDoll();
         
-        // 피 그리기
         particles.forEach(p => {
-            ctx.fillStyle = `rgba(255,0,0,${p.life})`;
-            ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = `rgba(200,0,0,${p.life})`;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
         });
 
-        // 대사 그리기
         floatingTexts.forEach(t => {
             ctx.fillStyle = `rgba(255,255,255,${t.life})`;
-            ctx.font = 'bold 18px Arial';
-            ctx.fillText(t.text, t.x - 50, t.y);
+            ctx.font = 'bold 28px Arial'; // 대사 글씨도 키움
+            ctx.fillText(t.text, t.x - 60, t.y);
         });
 
         requestAnimationFrame(render);
