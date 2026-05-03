@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Ragdoll Clicker - Content Restore & Border Fix</title>
+    <title>Ragdoll Clicker - Interaction & Explosion</title>
     <style>
         body { margin: 0; background-color: #1a1a1b; color: white; font-family: 'Pretendard', sans-serif; overflow: hidden; user-select: none; cursor: none; }
         #custom-cursor { position: fixed; top: 0; left: 0; font-size: 60px; pointer-events: none; z-index: 999; transform: translate(-50%, -50%); }
@@ -25,9 +25,13 @@
         button:hover:not(:disabled) { background: #505055; transform: translateY(-2px); }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
         .equipped { border: 2px solid #ffcc00 !important; color: #ffcc00 !important; }
-        canvas { display: block; background: radial-gradient(circle, #333 0%, #111 100%); }
-        .toggle-btn { background: #673ab7; color: white; display: none; }
+        
+        /* 토글 버튼 스타일 */
+        .toggle-btn { background: #444; color: white; }
         .toggle-active { background: #00e676 !important; color: black !important; }
+        .lock-btn { background: #673ab7; color: white; }
+
+        canvas { display: block; background: radial-gradient(circle, #333 0%, #111 100%); }
     </style>
 </head>
 <body>
@@ -37,7 +41,7 @@
 <div id="ui">
     <div class="stat-container">
         <div class="stat">💰 <span id="gold">0</span></div>
-        <div style="font-size: 13px; color: #aaa;">인형 개수: <span id="doll-count">1</span>개</div>
+        <div style="font-size: 13px; color: #aaa;">형진이 부대: <span id="doll-count">1</span>명</div>
         <div id="ammo-ui">🔫 탄창: <span id="ammo-count">30</span> / 30</div>
         <div id="reload-bar"><div id="reload-progress"></div></div>
     </div>
@@ -49,14 +53,16 @@
         <button class="menu-toggle" style="background:#4caf50" onclick="toggleMenu('storage')">가방</button>
     </div>
     <div id="shop" class="side-menu">
-        <button id="move-lock-buy" onclick="buyMoveLock()" style="background: #673ab7; color: white;">🔒 움직임 고정 (100,000,000,000G)</button>
+        <button id="move-lock-buy" class="lock-btn" onclick="buyFeature('moveLock', 100000000000)">🔒 움직임 고정 (1,000억G)</button>
+        <button id="bleed-buy" style="background:#cc0000;" onclick="buyFeature('bleed', 1000000)">🩸 출혈 효과 구매 (100만G)</button>
         <hr>
         <button onclick="buyDoll()" style="background: #ff4444; color: white;">👤 형진이 추가 (500,000G)</button>
         <button onclick="upgradeAtk()">🔥 근력 강화 (<span id="atk-cost">500</span>G)</button>
         <div id="shop-items"></div>
     </div>
     <div id="storage" class="side-menu">
-        <button id="move-toggle" class="toggle-btn" onclick="toggleMovement()">움직임: ON</button>
+        <button id="move-toggle" class="toggle-btn" style="display:none" onclick="toggleOption('move')">움직임: ON</button>
+        <button id="bleed-toggle" class="toggle-btn" style="display:none" onclick="toggleOption('bleed')">출혈: ON</button>
         <hr>
         <div id="inventory-items"></div>
     </div>
@@ -75,24 +81,29 @@
     resize();
 
     let gold = 0, atkMultiplier = 1.0, upgradeCost = 500;
-    let floatingTexts = [], bullets = [];
+    let floatingTexts = [], bullets = [], particles = [];
     let mouseX = 0, mouseY = 0;
-    let canMove = true;
-    let moveLockOwned = false;
+    
+    // 옵션 상태
+    let options = { move: true, bleed: true };
+    let unlocks = { moveLock: false, bleed: false };
 
     let currentAmmo = 30;
     let isReloading = false;
 
-    // 1. 무기 목록 복구 (독극물, 화염구 추가)
     const weapons = {
         punch: { name: '주먹', emoji: '👊', dmg: 30, price: 0, owned: true },
         dagger: { name: '단검', emoji: '🗡️', dmg: 150, price: 5000, owned: false },
         poison: { name: '독극물', emoji: '🧪', dmg: 20, price: 10000, owned: false, isPoison: true },
         fire: { name: '화염구', emoji: '🔥', dmg: 600, price: 50000, owned: false, isFire: true },
-        yumi: { name: '유미(고양이)', emoji: '🐱', dmg: 50, price: 25000, owned: false },
+        bomb: { name: '폭탄', emoji: '💣', dmg: 5000, price: 300000, owned: false, isBomb: true }, // 폭탄 추가
+        yumi: { name: '유미', emoji: '🐱', dmg: 50, price: 25000, owned: false },
         gun: { name: '권총', emoji: '🔫', dmg: 1200, price: 150000, owned: false, isGun: true }
     };
     let currentWeapon = 'punch';
+
+    const screams = ["으악!", "아파!", "그만해!", "살려줘!", "꾸엑!", "커헉!"];
+    const taunts = ["겨우 그정도냐?", "간지럽네ㅋㅋ", "안 아픈데?", "더 세게 때려봐", "푸하하!", "메롱~"];
 
     class Doll {
         constructor() {
@@ -102,6 +113,8 @@
             this.hp = this.maxHp;
             this.poisonStacks = 0;
             this.fireTicks = 0;
+            this.speech = "";
+            this.speechTimer = 0;
             this.parts = {
                 head: { rx: 0, ry: -120, r: 45 },
                 body: { rx: 0, ry: 0, w: 100, h: 140 },
@@ -110,63 +123,43 @@
                 legL: { rx: -30, ry: 130, w: 40, h: 120 },
                 legR: { rx: 30, ry: 130, w: 40, h: 120 }
             };
+            
+            // 주기적으로 도발
+            setInterval(() => {
+                if(this.hp > 0 && Math.random() < 0.2) this.say(taunts);
+            }, 5000);
         }
 
         respawnPosition() {
             this.x = Math.random() * (canvas.width - 600) + 300;
             this.y = 200;
-            this.vx = (Math.random() - 0.5) * 10;
-            this.vy = 0;
+            this.vx = (Math.random() - 0.5) * 15;
+            this.vy = -10;
+        }
+
+        say(list) {
+            this.speech = list[Math.floor(Math.random() * list.length)];
+            this.speechTimer = 100;
         }
 
         update() {
-            if (canMove) {
+            if (options.move) {
                 this.vy += 0.8; 
                 this.x += this.vx;
                 this.y += this.vy;
                 this.vx *= 0.98;
                 this.vy *= 0.98;
 
-                // 2. 맵 탈출 방지 로직 (강력 수정)
-                const margin = 100;
-                // 바닥 충돌
-                if (this.y > canvas.height - 180) {
-                    this.y = canvas.height - 180;
-                    this.vy *= -0.5;
-                }
-                // 천장 충돌
-                if (this.y < 120) {
-                    this.y = 120;
-                    this.vy *= -0.5;
-                }
-                // 좌우 벽 충돌 (메뉴 영역 고려)
-                if (this.x < 100) {
-                    this.x = 100;
-                    this.vx *= -0.5;
-                }
-                if (this.x > canvas.width - 350) {
-                    this.x = canvas.width - 350;
-                    this.vx *= -0.5;
-                }
-            } else {
-                this.vx = 0;
-                this.vy = 0;
+                // 벽 충돌 방지
+                if (this.y > canvas.height - 180) { this.y = canvas.height - 180; this.vy *= -0.5; }
+                if (this.y < 120) { this.y = 120; this.vy *= -0.5; }
+                if (this.x < 120) { this.x = 120; this.vx *= -0.5; }
+                if (this.x > canvas.width - 350) { this.x = canvas.width - 350; this.vx *= -0.5; }
             }
 
-            // 독극물 데미지 (지속)
-            if (this.poisonStacks > 0) {
-                const pDmg = this.poisonStacks * 0.2;
-                this.hp -= pDmg;
-                gold += pDmg * 5;
-                this.poisonStacks -= 0.01;
-            }
-            
-            // 화염구 데미지 (지속)
-            if (this.fireTicks > 0) {
-                this.hp -= 5;
-                gold += 50;
-                this.fireTicks--;
-            }
+            if (this.poisonStacks > 0) { this.hp -= this.poisonStacks * 0.2; this.poisonStacks -= 0.01; }
+            if (this.fireTicks > 0) { this.hp -= 5; this.fireTicks--; }
+            if (this.speechTimer > 0) this.speechTimer--;
 
             if (this.hp <= 0) this.respawn();
         }
@@ -178,51 +171,43 @@
             this.hp = this.maxHp;
             this.poisonStacks = 0;
             this.fireTicks = 0;
-            if (canMove) { 
-                this.respawnPosition();
-                this.vy = -20; 
-            }
+            this.respawnPosition();
         }
 
         draw() {
             ctx.save();
             ctx.translate(this.x, this.y);
             
+            // 대사창
+            if (this.speechTimer > 0) {
+                ctx.fillStyle = "white";
+                ctx.font = "bold 18px Arial";
+                ctx.textAlign = "center";
+                ctx.backgroundColor = "black";
+                ctx.fillText(this.speech, 0, -230);
+            }
+
             // 이름과 체력바
             ctx.fillStyle = "white";
-            ctx.font = "bold 22px Arial";
+            ctx.font = "bold 20px Arial";
             ctx.textAlign = "center";
-            ctx.fillText(`형진이 Lv.${this.level}`, 0, -190);
-
-            ctx.fillStyle = "#333";
-            ctx.fillRect(-60, -180, 120, 10);
+            ctx.fillText(`형진이 Lv.${this.level}`, 0, -195);
+            ctx.fillStyle = "#333"; ctx.fillRect(-60, -185, 120, 8);
             ctx.fillStyle = this.poisonStacks > 0 ? "#00ff00" : (this.fireTicks > 0 ? "#ffaa00" : "#ff4444");
-            ctx.fillRect(-60, -180, (this.hp / this.maxHp) * 120, 10);
+            ctx.fillRect(-60, -185, (this.hp / this.maxHp) * 120, 8);
 
-            // 신체 그리기
+            // 신체
             for (let k in this.parts) {
                 const p = this.parts[k];
                 ctx.fillStyle = this.fireTicks > 0 ? "#552200" : "#e0ac69";
                 ctx.strokeStyle = "#000";
-                ctx.lineWidth = 3;
-
                 if (p.r) { 
-                    ctx.beginPath();
-                    ctx.arc(p.rx, p.ry, p.r, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.stroke();
-                    // 눈과 입
+                    ctx.beginPath(); ctx.arc(p.rx, p.ry, p.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
                     ctx.fillStyle = "black";
-                    ctx.beginPath();
-                    ctx.arc(p.rx - 15, p.ry - 10, 4, 0, Math.PI * 2);
-                    ctx.arc(p.rx + 15, p.ry - 10, 4, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.arc(p.rx, p.ry + 10, 15, 0.2 * Math.PI, 0.8 * Math.PI);
-                    ctx.stroke();
+                    ctx.beginPath(); ctx.arc(p.rx - 15, p.ry - 10, 4, 0, Math.PI * 2); ctx.arc(p.rx + 15, p.ry - 10, 4, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(p.rx, p.ry + 10, 15, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke();
                 } else {
-                    ctx.fillRect(p.rx - p.w/2, p.ry - p.h/2, p.w, p.h);
-                    ctx.strokeRect(p.rx - p.w/2, p.ry - p.h/2, p.w, p.h);
+                    ctx.fillRect(p.rx - p.w/2, p.ry - p.h/2, p.w, p.h); ctx.strokeRect(p.rx - p.w/2, p.ry - p.h/2, p.w, p.h);
                 }
             }
             ctx.restore();
@@ -231,21 +216,22 @@
 
     let dolls = [new Doll()];
 
-    function buyMoveLock() {
-        if (gold >= 100000000000 && !moveLockOwned) {
-            gold -= 100000000000;
-            moveLockOwned = true;
-            document.getElementById('move-lock-buy').style.display = 'none';
-            document.getElementById('move-toggle').style.display = 'block';
+    function buyFeature(key, price) {
+        if (gold >= price && !unlocks[key]) {
+            gold -= price;
+            unlocks[key] = true;
+            document.getElementById(key + '-buy').style.display = 'none';
+            document.getElementById(key + '-toggle').style.display = 'block';
+            document.getElementById(key + '-toggle').classList.add('toggle-active');
             updateUI();
         }
     }
 
-    function toggleMovement() {
-        canMove = !canMove;
-        const btn = document.getElementById('move-toggle');
-        btn.innerText = canMove ? "움직임: ON" : "움직임: OFF (고정됨)";
-        btn.classList.toggle('toggle-active', !canMove);
+    function toggleOption(key) {
+        options[key] = !options[key];
+        const btn = document.getElementById(key + '-toggle');
+        btn.innerText = (key === 'move' ? "움직임: " : "출혈: ") + (options[key] ? "ON" : "OFF");
+        btn.classList.toggle('toggle-active', options[key]);
     }
 
     function buyDoll() {
@@ -256,34 +242,59 @@
         }
     }
 
-    function reloadGun() {
-        if (isReloading) return;
-        isReloading = true;
-        document.getElementById('reload-bar').style.display = 'block';
-        let progress = 0;
-        const interval = setInterval(() => {
-            progress += 5;
-            document.getElementById('reload-progress').style.width = progress + '%';
-            if (progress >= 100) {
-                clearInterval(interval);
-                currentAmmo = 30;
-                isReloading = false;
-                document.getElementById('reload-bar').style.display = 'none';
-                document.getElementById('ammo-count').innerText = currentAmmo;
+    function spawnBlood(x, y) {
+        if (!options.bleed) return;
+        for(let i=0; i<8; i++) {
+            particles.push({
+                x, y, 
+                vx: (Math.random()-0.5)*10, 
+                vy: (Math.random()-0.5)*10, 
+                size: Math.random()*5+2, 
+                life: 1, 
+                color: "#cc0000"
+            });
+        }
+    }
+
+    function explode(x, y) {
+        // 폭발 파티클
+        for(let i=0; i<30; i++) {
+            particles.push({
+                x, y, 
+                vx: (Math.random()-0.5)*30, 
+                vy: (Math.random()-0.5)*30, 
+                size: Math.random()*15+5, 
+                life: 1, 
+                color: Math.random() > 0.5 ? "#ffcc00" : "#ff4400"
+            });
+        }
+        // 범위 데미지
+        dolls.forEach(d => {
+            const dist = Math.hypot(d.x - x, d.y - y);
+            if (dist < 400) {
+                const force = (400 - dist) / 10;
+                d.vx += (d.x - x) * force * 0.1;
+                d.vy += (d.y - y) * force * 0.1;
+                applyDamage(d, weapons.bomb.dmg * (force/10), d.x, d.y, false);
+                d.say(["끄아아악!", "폭탄이다!", "비겁하다!"]);
             }
-        }, 100);
+        });
     }
 
     canvas.addEventListener('mousedown', (e) => {
         if (e.clientX > canvas.width - 320) return;
 
         if (currentWeapon === 'gun') {
-            if (isReloading) return;
-            if (currentAmmo <= 0) { reloadGun(); return; }
+            if (isReloading || currentAmmo <= 0) { reloadGun(); return; }
             currentAmmo--;
             document.getElementById('ammo-count').innerText = currentAmmo;
-            bullets.push({ x: mouseX, y: mouseY, vx: 50, vy: (Math.random()-0.5)*5, dmg: weapons.gun.dmg });
+            bullets.push({ x: mouseX, y: mouseY, vx: 60, vy: (Math.random()-0.5)*5, dmg: weapons.gun.dmg });
             if (currentAmmo === 0) reloadGun();
+            return;
+        }
+
+        if (currentWeapon === 'bomb') {
+            explode(mouseX, mouseY);
             return;
         }
 
@@ -294,19 +305,21 @@
                     if (weapons[currentWeapon].isPoison) d.poisonStacks += 10;
                     if (weapons[currentWeapon].isFire) d.fireTicks = 100;
                     applyDamage(d, weapons[currentWeapon].dmg, mouseX, mouseY);
+                    if (Math.random() < 0.3) d.say(screams);
                 }
             }
         });
     });
 
-    function applyDamage(targetDoll, dmg, x, y) {
+    function applyDamage(targetDoll, dmg, x, y, blood = true) {
         const finalDmg = dmg * atkMultiplier;
         targetDoll.hp -= finalDmg;
         gold += finalDmg * 15;
-        if (canMove) {
-            targetDoll.vx += (targetDoll.x - x) * 0.25;
-            targetDoll.vy += (targetDoll.y - y) * 0.25;
+        if (options.move) {
+            targetDoll.vx += (targetDoll.x - x) * 0.2;
+            targetDoll.vy += (targetDoll.y - y) * 0.2;
         }
+        if (blood) spawnBlood(x, y);
         floatingTexts.push({ x, y, text: `+${Math.floor(finalDmg*15)}`, color: "#ffcc00", life: 1 });
     }
 
@@ -340,22 +353,53 @@
         }
     }
 
+    function reloadGun() {
+        if (isReloading) return;
+        isReloading = true;
+        document.getElementById('reload-bar').style.display = 'block';
+        let progress = 0;
+        const interval = setInterval(() => {
+            progress += 5;
+            document.getElementById('reload-progress').style.width = progress + '%';
+            if (progress >= 100) { clearInterval(interval); currentAmmo = 30; isReloading = false;
+                document.getElementById('reload-bar').style.display = 'none';
+                document.getElementById('ammo-count').innerText = currentAmmo;
+            }
+        }, 80);
+    }
+
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        particles.forEach((p, i) => {
+            p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life -= 0.02;
+            ctx.globalAlpha = p.life; ctx.fillStyle = p.color;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+            if(p.life <= 0) particles.splice(i, 1);
+        });
+        ctx.globalAlpha = 1;
+
         dolls.forEach(d => { d.update(); d.draw(); });
+        
         bullets.forEach((b, i) => {
             b.x += b.vx; b.y += b.vy;
             ctx.fillStyle = "yellow"; ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, Math.PI*2); ctx.fill();
             dolls.forEach(d => {
-                if (Math.hypot(b.x - d.x, b.y - d.y) < 100) { applyDamage(d, b.dmg, b.x, b.y); bullets.splice(i, 1); }
+                if (Math.hypot(b.x - d.x, b.y - d.y) < 100) { 
+                    applyDamage(d, b.dmg, b.x, b.y); 
+                    bullets.splice(i, 1);
+                    if(Math.random() < 0.4) d.say(screams);
+                }
             });
             if(b.x > canvas.width) bullets.splice(i, 1);
         });
+
         floatingTexts.forEach((t, i) => {
             ctx.fillStyle = t.color; ctx.font = "bold 20px Arial";
             ctx.fillText(t.text, t.x, t.y); t.y -= 2; t.life -= 0.02;
             if(t.life <= 0) floatingTexts.splice(i, 1);
         });
+
         goldDisplay.innerText = Math.floor(gold).toLocaleString();
         requestAnimationFrame(draw);
     }
