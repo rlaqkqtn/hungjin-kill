@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Ragdoll Clicker - Fix & Physics</title>
+    <title>Ragdoll Clicker - Content Restore & Border Fix</title>
     <style>
         body { margin: 0; background-color: #1a1a1b; color: white; font-family: 'Pretendard', sans-serif; overflow: hidden; user-select: none; cursor: none; }
         #custom-cursor { position: fixed; top: 0; left: 0; font-size: 60px; pointer-events: none; z-index: 999; transform: translate(-50%, -50%); }
@@ -77,15 +77,18 @@
     let gold = 0, atkMultiplier = 1.0, upgradeCost = 500;
     let floatingTexts = [], bullets = [];
     let mouseX = 0, mouseY = 0;
-    let canMove = true; // 기본값은 True (물리법칙 적용)
+    let canMove = true;
     let moveLockOwned = false;
 
     let currentAmmo = 30;
     let isReloading = false;
 
+    // 1. 무기 목록 복구 (독극물, 화염구 추가)
     const weapons = {
         punch: { name: '주먹', emoji: '👊', dmg: 30, price: 0, owned: true },
         dagger: { name: '단검', emoji: '🗡️', dmg: 150, price: 5000, owned: false },
+        poison: { name: '독극물', emoji: '🧪', dmg: 20, price: 10000, owned: false, isPoison: true },
+        fire: { name: '화염구', emoji: '🔥', dmg: 600, price: 50000, owned: false, isFire: true },
         yumi: { name: '유미(고양이)', emoji: '🐱', dmg: 50, price: 25000, owned: false },
         gun: { name: '권총', emoji: '🔫', dmg: 1200, price: 150000, owned: false, isGun: true }
     };
@@ -93,14 +96,12 @@
 
     class Doll {
         constructor() {
-            this.x = Math.random() * (canvas.width - 400) + 200;
-            this.y = 100;
-            this.vx = (Math.random() - 0.5) * 10;
-            this.vy = 0;
+            this.respawnPosition();
             this.level = 1;
             this.maxHp = 1000;
             this.hp = this.maxHp;
-            // 렌더링 파트 정의
+            this.poisonStacks = 0;
+            this.fireTicks = 0;
             this.parts = {
                 head: { rx: 0, ry: -120, r: 45 },
                 body: { rx: 0, ry: 0, w: 100, h: 140 },
@@ -111,81 +112,115 @@
             };
         }
 
+        respawnPosition() {
+            this.x = Math.random() * (canvas.width - 600) + 300;
+            this.y = 200;
+            this.vx = (Math.random() - 0.5) * 10;
+            this.vy = 0;
+        }
+
         update() {
-            if (canMove) { // 고정 버튼을 켜지 않았을 때만 물리법칙 적용
-                this.vy += 0.8; // 중력
+            if (canMove) {
+                this.vy += 0.8; 
                 this.x += this.vx;
                 this.y += this.vy;
-                this.vx *= 0.99;
-                this.vy *= 0.99;
+                this.vx *= 0.98;
+                this.vy *= 0.98;
 
-                // 화면 충돌 처리
-                if (this.y > canvas.height - 200) { this.y = canvas.height - 200; this.vy *= -0.6; }
-                if (this.x < 150 || this.x > canvas.width - 400) { this.vx *= -0.8; }
+                // 2. 맵 탈출 방지 로직 (강력 수정)
+                const margin = 100;
+                // 바닥 충돌
+                if (this.y > canvas.height - 180) {
+                    this.y = canvas.height - 180;
+                    this.vy *= -0.5;
+                }
+                // 천장 충돌
+                if (this.y < 120) {
+                    this.y = 120;
+                    this.vy *= -0.5;
+                }
+                // 좌우 벽 충돌 (메뉴 영역 고려)
+                if (this.x < 100) {
+                    this.x = 100;
+                    this.vx *= -0.5;
+                }
+                if (this.x > canvas.width - 350) {
+                    this.x = canvas.width - 350;
+                    this.vx *= -0.5;
+                }
             } else {
-                // 고정 상태일 때는 속도 0
                 this.vx = 0;
                 this.vy = 0;
             }
 
-            // 고양이 유미 자동 공격
-            if (weapons.yumi.owned && Math.random() < 0.01) {
-                this.hp -= 50;
-                gold += 100;
+            // 독극물 데미지 (지속)
+            if (this.poisonStacks > 0) {
+                const pDmg = this.poisonStacks * 0.2;
+                this.hp -= pDmg;
+                gold += pDmg * 5;
+                this.poisonStacks -= 0.01;
+            }
+            
+            // 화염구 데미지 (지속)
+            if (this.fireTicks > 0) {
+                this.hp -= 5;
+                gold += 50;
+                this.fireTicks--;
             }
 
             if (this.hp <= 0) this.respawn();
         }
 
         respawn() {
-            gold += 50000 * this.level;
+            gold += 100000 * this.level;
             this.level++;
             this.maxHp *= 1.4;
             this.hp = this.maxHp;
-            if (canMove) { this.vy = -30; this.vx = (Math.random()-0.5)*30; }
+            this.poisonStacks = 0;
+            this.fireTicks = 0;
+            if (canMove) { 
+                this.respawnPosition();
+                this.vy = -20; 
+            }
         }
 
         draw() {
             ctx.save();
             ctx.translate(this.x, this.y);
             
-            // [버그 수정] 이름과 체력바 다시 그리기
+            // 이름과 체력바
             ctx.fillStyle = "white";
             ctx.font = "bold 22px Arial";
             ctx.textAlign = "center";
             ctx.fillText(`형진이 Lv.${this.level}`, 0, -190);
 
-            // 체력바
             ctx.fillStyle = "#333";
             ctx.fillRect(-60, -180, 120, 10);
-            ctx.fillStyle = "#ff4444";
+            ctx.fillStyle = this.poisonStacks > 0 ? "#00ff00" : (this.fireTicks > 0 ? "#ffaa00" : "#ff4444");
             ctx.fillRect(-60, -180, (this.hp / this.maxHp) * 120, 10);
 
-            // [버그 수정] 인형 신체 및 표정 그리기
+            // 신체 그리기
             for (let k in this.parts) {
                 const p = this.parts[k];
-                ctx.fillStyle = "#e0ac69"; // 살구색
+                ctx.fillStyle = this.fireTicks > 0 ? "#552200" : "#e0ac69";
                 ctx.strokeStyle = "#000";
                 ctx.lineWidth = 3;
 
-                if (p.r) { // 머리
+                if (p.r) { 
                     ctx.beginPath();
                     ctx.arc(p.rx, p.ry, p.r, 0, Math.PI * 2);
                     ctx.fill();
                     ctx.stroke();
-
-                    // 눈 그리기
+                    // 눈과 입
                     ctx.fillStyle = "black";
                     ctx.beginPath();
                     ctx.arc(p.rx - 15, p.ry - 10, 4, 0, Math.PI * 2);
                     ctx.arc(p.rx + 15, p.ry - 10, 4, 0, Math.PI * 2);
                     ctx.fill();
-
-                    // 입 그리기 (웃는 표정)
                     ctx.beginPath();
                     ctx.arc(p.rx, p.ry + 10, 15, 0.2 * Math.PI, 0.8 * Math.PI);
                     ctx.stroke();
-                } else { // 몸통, 팔, 다리
+                } else {
                     ctx.fillRect(p.rx - p.w/2, p.ry - p.h/2, p.w, p.h);
                     ctx.strokeRect(p.rx - p.w/2, p.ry - p.h/2, p.w, p.h);
                 }
@@ -207,7 +242,7 @@
     }
 
     function toggleMovement() {
-        canMove = !canMove; // 전역 물리 상태 변경
+        canMove = !canMove;
         const btn = document.getElementById('move-toggle');
         btn.innerText = canMove ? "움직임: ON" : "움직임: OFF (고정됨)";
         btn.classList.toggle('toggle-active', !canMove);
@@ -225,22 +260,18 @@
         if (isReloading) return;
         isReloading = true;
         document.getElementById('reload-bar').style.display = 'block';
-        let start = null;
-        function animateReload(timestamp) {
-            if (!start) start = timestamp;
-            let progress = timestamp - start;
-            let percent = Math.min((progress / 2000) * 100, 100);
-            document.getElementById('reload-progress').style.width = percent + '%';
-            if (progress < 2000) {
-                requestAnimationFrame(animateReload);
-            } else {
+        let progress = 0;
+        const interval = setInterval(() => {
+            progress += 5;
+            document.getElementById('reload-progress').style.width = progress + '%';
+            if (progress >= 100) {
+                clearInterval(interval);
                 currentAmmo = 30;
                 isReloading = false;
                 document.getElementById('reload-bar').style.display = 'none';
                 document.getElementById('ammo-count').innerText = currentAmmo;
             }
-        }
-        requestAnimationFrame(animateReload);
+        }, 100);
     }
 
     canvas.addEventListener('mousedown', (e) => {
@@ -260,6 +291,8 @@
             for (let k in d.parts) {
                 const p = d.parts[k];
                 if (Math.hypot(mouseX - (d.x+p.rx), mouseY - (d.y+p.ry)) < 70) {
+                    if (weapons[currentWeapon].isPoison) d.poisonStacks += 10;
+                    if (weapons[currentWeapon].isFire) d.fireTicks = 100;
                     applyDamage(d, weapons[currentWeapon].dmg, mouseX, mouseY);
                 }
             }
@@ -269,12 +302,12 @@
     function applyDamage(targetDoll, dmg, x, y) {
         const finalDmg = dmg * atkMultiplier;
         targetDoll.hp -= finalDmg;
-        gold += finalDmg * 10;
-        if (canMove) { // 물리 법칙이 켜져있을 때만 튕겨나감
-            targetDoll.vx += (targetDoll.x - x) * 0.2;
-            targetDoll.vy += (targetDoll.y - y) * 0.2;
+        gold += finalDmg * 15;
+        if (canMove) {
+            targetDoll.vx += (targetDoll.x - x) * 0.25;
+            targetDoll.vy += (targetDoll.y - y) * 0.25;
         }
-        floatingTexts.push({ x, y, text: `+${Math.floor(finalDmg*10)}`, color: "#ffcc00", life: 1 });
+        floatingTexts.push({ x, y, text: `+${Math.floor(finalDmg*15)}`, color: "#ffcc00", life: 1 });
     }
 
     function updateUI() {
@@ -301,17 +334,15 @@
     function upgradeAtk() {
         if (gold >= upgradeCost) {
             gold -= upgradeCost;
-            atkMultiplier += 1.0;
-            upgradeCost *= 2.5;
+            atkMultiplier += 1.2;
+            upgradeCost *= 2.8;
             document.getElementById('atk-cost').innerText = Math.floor(upgradeCost).toLocaleString();
         }
     }
 
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
         dolls.forEach(d => { d.update(); d.draw(); });
-
         bullets.forEach((b, i) => {
             b.x += b.vx; b.y += b.vy;
             ctx.fillStyle = "yellow"; ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, Math.PI*2); ctx.fill();
@@ -320,13 +351,11 @@
             });
             if(b.x > canvas.width) bullets.splice(i, 1);
         });
-
         floatingTexts.forEach((t, i) => {
             ctx.fillStyle = t.color; ctx.font = "bold 20px Arial";
             ctx.fillText(t.text, t.x, t.y); t.y -= 2; t.life -= 0.02;
             if(t.life <= 0) floatingTexts.splice(i, 1);
         });
-
         goldDisplay.innerText = Math.floor(gold).toLocaleString();
         requestAnimationFrame(draw);
     }
