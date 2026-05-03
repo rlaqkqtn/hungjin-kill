@@ -2,9 +2,22 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Ragdoll Clicker - Bug Fix</title>
+    <title>Ragdoll Clicker - Final Fix</title>
     <style>
-        body { margin: 0; background-color: #1a1a1b; color: white; font-family: 'Pretendard', sans-serif; overflow: hidden; user-select: none; cursor: none; } /* 커서 숨김 */
+        body { margin: 0; background-color: #1a1a1b; color: white; font-family: 'Pretendard', sans-serif; overflow: hidden; user-select: none; cursor: none; }
+        
+        /* 1. 무기 아이콘 레이어 (마우스 따라오기 완벽 수정) */
+        #custom-cursor { 
+            position: fixed; 
+            top: 0; left: 0; 
+            font-size: 60px; 
+            pointer-events: none; 
+            z-index: 999; 
+            transform: translate(-50%, -50%);
+            display: block;
+            will-change: transform;
+        }
+
         #ui { position: absolute; top: 20px; left: 20px; pointer-events: none; z-index: 100; }
         .stat-container { background: rgba(0, 0, 0, 0.85); padding: 15px; border-radius: 12px; border-left: 5px solid #ffcc00; min-width: 220px; }
         .stat { font-size: 24px; margin-bottom: 5px; color: #fff; font-weight: bold; }
@@ -12,7 +25,7 @@
         #hp-inner { width: 100%; height: 100%; background: linear-gradient(90deg, #ff4444, #ff8888); transition: width 0.2s; }
         
         .menu-wrapper { position: absolute; right: 0; top: 0; height: 100vh; display: flex; align-items: center; z-index: 200; cursor: default; }
-        .side-menu { background: rgba(30, 30, 35, 0.98); width: 280px; height: 100vh; padding: 20px; border-left: 2px solid #444; box-sizing: border-box; display: none; }
+        .side-menu { background: rgba(30, 30, 35, 0.98); width: 280px; height: 100vh; padding: 20px; border-left: 2px solid #444; box-sizing: border-box; display: none; overflow-y: auto; }
         .side-menu.active { display: block; }
         .tab-container { display: flex; flex-direction: column; gap: 5px; }
         .menu-toggle { background: #ffcc00; color: #000; padding: 20px 10px; cursor: pointer; border-radius: 10px 0 0 10px; font-weight: bold; writing-mode: vertical-lr; border: none; font-size: 14px; }
@@ -22,9 +35,6 @@
         
         canvas { display: block; background: #252527; }
         #gold-rush-ui { position: absolute; top: 150px; left: 20px; display: none; background: #ffcc00; color: black; padding: 10px; font-weight: bold; border-radius: 5px; z-index: 100; }
-
-        /* 1. 커서 대신 따라다닐 무기 아이콘 레이어 */
-        #custom-cursor { position: fixed; top: 0; left: 0; font-size: 50px; pointer-events: none; z-index: 999; transform: translate(-50%, -50%); transition: transform 0.05s ease-out; display: block; }
     </style>
 </head>
 <body>
@@ -62,7 +72,7 @@
     const ctx = canvas.getContext('2d');
     const cursor = document.getElementById('custom-cursor');
     
-    let isGameRunning = false; // 중복 실행 방지용 플래그
+    let isGameRunning = false;
 
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
     window.addEventListener('resize', resize);
@@ -71,24 +81,26 @@
     let gold = 0, isDead = false, atkMultiplier = 1.0, upgradeCost = 500;
     let particles = [], floatingTexts = [], explosions = [], bullets = [];
     let mouseX = 0, mouseY = 0;
-    let lastAttackTime = Date.now();
+    let lastHitTime = Date.now(); // 2. 마지막 피격 시간 추적
     let dollLv = 1;
     let clickHistory = [];
     let isGoldRush = false;
     let goldRushTimer = 0;
 
+    // 3. 무기 목록 (단검, 유미 추가)
     const weapons = {
         punch: { name: '기본 주먹', emoji: '👊', dmg: 20, price: 0, owned: true },
-        poison: { name: '독극물', emoji: '🧪', dmg: 15, price: 1500, owned: false, isPoison: true },
-        gun: { name: '권총', emoji: '🔫', dmg: 100, price: 6000, owned: false, isGun: true },
-        gear: { name: '톱니바퀴', emoji: '⚙️', dmg: 60, price: 10000, owned: false, isPlaced: true },
-        fire: { name: '화염구', emoji: '🔥', dmg: 350, price: 25000, owned: false, isFire: true },
-        bomb: { name: '폭탄', emoji: '💣', dmg: 2000, price: 60000, owned: false, isExplosive: true }
+        yumi: { name: '유미', emoji: '🐱', dmg: 80, price: 500, owned: false },
+        dagger: { name: '단검', emoji: '🗡️', dmg: 140, price: 1200, owned: false },
+        poison: { name: '독극물', emoji: '🧪', dmg: 15, price: 3000, owned: false, isPoison: true },
+        gun: { name: '권총', emoji: '🔫', dmg: 110, price: 8000, owned: false, isGun: true },
+        gear: { name: '톱니바퀴', emoji: '⚙️', dmg: 70, price: 15000, owned: false, isPlaced: true },
+        fire: { name: '화염구', emoji: '🔥', dmg: 400, price: 35000, owned: false, isFire: true },
+        bomb: { name: '폭탄', emoji: '💣', dmg: 2500, price: 80000, owned: false, isExplosive: true }
     };
     let currentWeapon = 'punch';
     let placedGear = null;
 
-    // 인형 데이터 (단 하나만 존재하도록 보장)
     let doll = {
         x: canvas.width / 2, y: canvas.height / 2, vx: 0, vy: 0, 
         charred: 0, poisonStacks: 0,
@@ -102,7 +114,7 @@
         }
     };
 
-    const screams = ["아야!", "형진이 아파!", "그만해!", "악!", "난 게이일 뿐이야", "너무해!", "멈춰줘!"];
+    const screams = ["아야!", "형진이 아파!", "그만해!", "악!", "난 게이일 뿐이야", "멈춰!", "히익!"];
     const taunts = ["간지러운데?", "고작 그정도?", "졸려..", "ㅋ", "안맞쥬?"];
 
     function toggleMenu(id) {
@@ -110,7 +122,6 @@
         menus.forEach(m => m.id === id ? m.classList.toggle('active') : m.classList.remove('active'));
     }
 
-    // 2. 인형 복제 방지: 단순 UI 업데이트 로직으로 분리
     function updateUI() {
         const shop = document.getElementById('shop-items');
         const inv = document.getElementById('inventory-items');
@@ -121,20 +132,10 @@
             btn.innerHTML = `${w.emoji} ${w.name} ${w.owned ? '' : '('+w.price+'G)'}`;
             if (w.owned) {
                 btn.className = id === currentWeapon ? 'equipped' : '';
-                btn.onclick = () => { 
-                    currentWeapon = id; 
-                    cursor.innerText = w.emoji; // 아이콘 즉시 변경
-                    updateUI(); 
-                };
+                btn.onclick = () => { currentWeapon = id; cursor.innerText = w.emoji; updateUI(); };
                 inv.appendChild(btn);
             } else {
-                btn.onclick = () => { 
-                    if(gold >= w.price) { 
-                        gold -= w.price; 
-                        w.owned = true; 
-                        updateUI(); 
-                    } 
-                };
+                btn.onclick = () => { if(gold >= w.price) { gold -= w.price; w.owned = true; updateUI(); } };
                 shop.appendChild(btn);
             }
         }
@@ -158,7 +159,7 @@
     function applyDamage(key, dmg, x, y, isAuto = false) {
         if (isDead || !doll.parts[key].active) return;
         
-        lastAttackTime = Date.now();
+        lastHitTime = Date.now(); // 피격 시간 갱신
         const part = doll.parts[key];
         const finalDmg = dmg * atkMultiplier;
         part.hp -= finalDmg;
@@ -175,11 +176,9 @@
         if (part.hp <= 0) {
             if (key === 'body') {
                 isDead = true;
-                spawnText(doll.x, doll.y, "형진이 KO!", "#ff0000");
+                spawnText(doll.x, doll.y, "KO!", "#ff0000");
                 setTimeout(respawn, 1500);
-            } else {
-                part.active = false;
-            }
+            } else { part.active = false; }
         }
 
         if (!isAuto && Math.random() < 0.3) {
@@ -189,8 +188,7 @@
     }
 
     function respawn() {
-        isDead = false;
-        dollLv++;
+        isDead = false; dollLv++;
         document.getElementById('doll-lv').innerText = dollLv;
         doll.x = canvas.width / 2; doll.y = canvas.height / 2;
         doll.vx = 0; doll.vy = 0; doll.charred = 0; doll.poisonStacks = 0;
@@ -207,17 +205,15 @@
         }
     }
 
-    // 1. 아이콘 추적 버그 수정: MouseMove 리스너 최적화
+    // 1. 무기 추적 로직 (윈도우 이벤트로 변경하여 더 부드럽게)
     window.addEventListener('mousemove', (e) => { 
         mouseX = e.clientX; 
         mouseY = e.clientY;
-        // 커서 위치 업데이트
         cursor.style.transform = `translate(${mouseX}px, ${mouseY}px) translate(-50%, -50%)`;
     });
 
     canvas.addEventListener('mousedown', (e) => {
         if (e.clientX > canvas.width - 300) return;
-        
         const now = Date.now();
         clickHistory.push(now);
         clickHistory = clickHistory.filter(t => now - t < 1000);
@@ -231,15 +227,10 @@
             bullets.push({ x: mouseX, y: mouseY, vx: Math.cos(angle) * 25, vy: Math.sin(angle) * 25, dmg: weapons.gun.dmg });
             return;
         }
-
-        if (weapons[currentWeapon].isPlaced) {
-            placedGear = { x: mouseX, y: mouseY, lastHit: 0 };
-            return;
-        }
+        if (weapons[currentWeapon].isPlaced) { placedGear = { x: mouseX, y: mouseY, lastHit: 0 }; return; }
 
         for (let k in doll.parts) {
-            const p = doll.parts[k];
-            if (!p.active) continue;
+            const p = doll.parts[k]; if (!p.active) continue;
             const px = doll.x + p.rx, py = doll.y + p.ry;
             const hit = p.r ? Math.hypot(mouseX - px, mouseY - py) < p.r :
                              (mouseX > px - p.w/2 && mouseX < px + p.w/2 && mouseY > py - p.h/2 && mouseY < py + p.h/2);
@@ -253,7 +244,17 @@
 
     function update() {
         if (!isDead) {
-            doll.vy += 0.5;
+            // 2. 5초 동안 안 맞으면 중앙 복귀 로직
+            if (Date.now() - lastHitTime > 5000) {
+                const centerX = canvas.width / 2;
+                const centerY = canvas.height / 2;
+                doll.vx += (centerX - doll.x) * 0.01;
+                doll.vy += (centerY - doll.y) * 0.01;
+                if (Math.random() < 0.01) spawnText(doll.x, doll.y - 150, "평화롭다..", "#00ff00");
+            } else {
+                doll.vy += 0.5; // 평상시 중력
+            }
+
             doll.x += doll.vx; doll.y += doll.vy;
             doll.vx *= 0.95; doll.vy *= 0.95;
 
@@ -265,22 +266,20 @@
             if (doll.x < 100) { doll.x = 100; doll.vx *= -0.5; }
             if (doll.x > canvas.width - 350) { doll.x = canvas.width - 350; doll.vx *= -0.5; }
             if (doll.y > canvas.height - 150) { doll.y = canvas.height - 150; doll.vy *= -0.5; }
-
-            if (Date.now() - lastAttackTime > 3000 && Math.random() < 0.01) {
-                spawnText(doll.x, doll.y - 150, taunts[Math.floor(Math.random()*taunts.length)], "#ffffff");
-                lastAttackTime = Date.now();
-            }
+            if (doll.y < 100) { doll.y = 100; doll.vy *= 0; }
         }
 
+        // 탄환 및 이펙트 업데이트
         for (let i = bullets.length - 1; i >= 0; i--) {
             let b = bullets[i]; b.x += b.vx; b.y += b.vy;
             for (let k in doll.parts) {
                 const p = doll.parts[k]; if (!p.active) continue;
                 const px = doll.x + p.rx, py = doll.y + p.ry;
-                const hit = p.r ? Math.hypot(b.x - px, b.y - py) < p.r : (b.x > px - p.w/2 && b.x < px + p.w/2 && b.y > py - p.h/2 && b.y < py + p.h/2);
-                if (hit) { applyDamage(k, b.dmg, b.x, b.y); bullets.splice(i, 1); break; }
+                if (p.r ? Math.hypot(b.x - px, b.y - py) < p.r : (b.x > px - p.w/2 && b.x < px + p.w/2 && b.y > py - p.h/2 && b.y < py + p.h/2)) {
+                    applyDamage(k, b.dmg, b.x, b.y); bullets.splice(i, 1); break;
+                }
             }
-            if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) bullets.splice(i, 1);
+            if (b && (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height)) bullets.splice(i, 1);
         }
 
         if (isGoldRush) {
@@ -292,8 +291,10 @@
             if (Date.now() - placedGear.lastHit > 500) {
                 for(let k in doll.parts) {
                     if(!doll.parts[k].active) continue;
-                    const d = Math.hypot(placedGear.x - (doll.x + doll.parts[k].rx), placedGear.y - (doll.y + doll.parts[k].ry));
-                    if (d < 100) { applyDamage(k, weapons.gear.dmg, placedGear.x, placedGear.y, true); placedGear.lastHit = Date.now(); break; }
+                    if (Math.hypot(placedGear.x - (doll.x + doll.parts[k].rx), placedGear.y - (doll.y + doll.parts[k].ry)) < 100) {
+                        applyDamage(k, weapons.gear.dmg, placedGear.x, placedGear.y, true); 
+                        placedGear.lastHit = Date.now(); break;
+                    }
                 }
             }
         }
@@ -301,10 +302,10 @@
 
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+        
+        // 인형 그리기
         for (let k in doll.parts) {
-            const p = doll.parts[k];
-            if (!p.active) continue;
+            const p = doll.parts[k]; if (!p.active) continue;
             const px = doll.x + p.rx, py = doll.y + p.ry;
             let r = 224 - (doll.charred * 180), g = 172 - (doll.charred * 150), b = 105 - (doll.charred * 90);
             if (doll.poisonStacks > 10) { g += 50; r -= 30; b -= 30; }
@@ -352,12 +353,7 @@
         requestAnimationFrame(draw);
     }
 
-    // 2. 인형 복사 방지: 게임 루프가 한 번만 실행되도록 체크
-    if (!isGameRunning) {
-        isGameRunning = true;
-        updateUI();
-        draw();
-    }
+    if (!isGameRunning) { isGameRunning = true; updateUI(); draw(); }
 </script>
 </body>
 </html>
