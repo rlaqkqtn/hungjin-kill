@@ -2,18 +2,15 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Ragdoll Clicker - 무기 상점 업데이트</title>
+    <title>Ragdoll Clicker - 형진이 고문 모드</title>
     <style>
         body { margin: 0; background-color: #050505; color: white; font-family: 'Arial', sans-serif; overflow: hidden; user-select: none; }
         #ui { position: absolute; top: 20px; left: 20px; pointer-events: none; }
         .stat { font-size: 28px; margin-bottom: 5px; color: #ff3333; text-shadow: 2px 2px 4px #000; font-weight: bold; }
-        #shop { position: absolute; right: 20px; top: 20px; background: rgba(20, 0, 0, 0.9); padding: 15px; border-radius: 15px; border: 3px solid #ff0000; width: 250px; }
-        .shop-item { margin-bottom: 10px; border-bottom: 1px dashed #500; padding-bottom: 5px; }
-        button { width: 100%; padding: 10px; cursor: pointer; background: #600; color: white; border: 1px solid #f00; font-size: 14px; font-weight: bold; }
-        button:disabled { background: #222; border-color: #444; color: #666; cursor: default; }
-        button:hover:not(:disabled) { background: #a00; }
+        #shop { position: absolute; right: 20px; top: 20px; background: rgba(20, 0, 0, 0.9); padding: 15px; border-radius: 15px; border: 3px solid #ff0000; width: 220px; }
+        button { width: 100%; padding: 10px; margin: 5px 0; cursor: pointer; background: #600; color: white; border: 1px solid #f00; font-size: 14px; font-weight: bold; }
+        button:hover { background: #a00; }
         canvas { background: #0a0a0a; }
-        #death-msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 40px; color: red; display: none; font-weight: bold; text-shadow: 0 0 15px black; }
     </style>
 </head>
 <body>
@@ -21,29 +18,15 @@
 <div id="ui">
     <div class="stat">골드: <span id="gold">0</span>G</div>
     <div class="stat">형진이 HP: <span id="hp">100</span> / <span id="max-hp">100</span></div>
-    <div class="stat" style="color:#aaa; font-size: 20px;">무기: <span id="cur-weapon">기본 주먹</span></div>
 </div>
 
-<div id="death-msg">형진이 사망 (부활 대기 중...)</div>
-
 <div id="shop">
-    <h3 style="margin:0 0 10px 0; color:#ff0000; font-size:20px;">무기 & 도구 상점</h3>
-    <div class="shop-item">
-        <button id="btn-knife" onclick="buyWeapon('knife', 100, 20)">칼 (100G)</button>
-    </div>
-    <div class="shop-item">
-        <button id="btn-gun" onclick="buyWeapon('gun', 500, 45)">총 (500G)</button>
-    </div>
-    <div class="shop-item">
-        <button id="btn-flame" onclick="buyWeapon('flame', 1200, 5)">화염방사기 (1200G)</button>
-    </div>
-    <div class="shop-item">
-        <button id="btn-bomb" onclick="buyWeapon('bomb', 2000, 150)">폭탄 (2000G)</button>
-    </div>
-    <div class="shop-item">
-        <button id="btn-yumi" onclick="buyYumi()">고양이 유미 (3000G)</button>
-    </div>
-    <button onclick="addSaw()" style="background:#444;">톱니바퀴 설치 (300G)</button>
+    <h3 style="margin:0 0 10px 0; color:#ff0000; font-size:18px;">무기 구매 (드래그 가능)</h3>
+    <button onclick="addWeapon('🗡️', 100, 15)">칼 구매 (100G)</button>
+    <button onclick="addWeapon('🔥', 500, 5)">화염방사기 (500G)</button>
+    <button onclick="addWeapon('💣', 1000, 100)">폭탄 구매 (1000G)</button>
+    <button onclick="addWeapon('🐈', 2000, 10)">유미 소환 (2000G)</button>
+    <button onclick="addWeapon('⚙️', 300, 2)">톱니바퀴 (300G)</button>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -58,16 +41,13 @@
     let maxHp = 100;
     let hp = 100;
     let isDead = false;
-    let currentWeapon = { id: 'hand', name: '기본 주먹', dmg: 10 };
 
     let particles = [];
-    let saws = [];
+    let weapons = []; // 24. 모든 무기 객체 관리
     let floatingTexts = [];
-    let isDraggingDoll = false;
-    let draggedSaw = null;
-    let yumi = null; // 20. 고양이 유미
+    let draggedObj = null;
 
-    const quotes = ["아야!", "그만해!", "Don't do that!", "정말 고통스러운!", "때리지마 난 게이일 뿐이라고", "형진이는 아프다..", "제발 살려줘!"];
+    const quotes = ["아야!", "그만해!", "Don't do that!", "제발!", "때리지마!", "형진이는 아프다..", "살려줘!"];
 
     let doll = {
         x: canvas.width / 2, y: canvas.height / 2,
@@ -75,10 +55,10 @@
         parts: [
             { name: 'head', rx: 0, ry: -70, r: 25, active: true },
             { name: 'body', rx: 0, ry: 0, w: 45, h: 70, active: true },
-            { name: 'armL', rx: -35, ry: -15, w: 15, h: 45, angle: 0.3, active: true },
-            { name: 'armR', rx: 35, ry: -15, w: 15, h: 45, angle: -0.3, active: true },
-            { name: 'legL', rx: -15, ry: 65, w: 18, h: 55, angle: 0.1, active: true },
-            { name: 'legR', rx: 15, ry: 65, w: 18, h: 55, angle: -0.1, active: true }
+            { name: 'armL', rx: -35, ry: -15, w: 15, h: 45, active: true },
+            { name: 'armR', rx: 35, ry: -15, w: 15, h: 45, active: true },
+            { name: 'legL', rx: -15, ry: 65, w: 18, h: 55, active: true },
+            { name: 'legR', rx: 15, ry: 65, w: 18, h: 55, active: true }
         ]
     };
 
@@ -92,54 +72,43 @@
     }
 
     function speak() {
-        if(Math.random() < 0.3) {
+        if(Math.random() < 0.1) {
             floatingTexts.push({ x: doll.x, y: doll.y - 120, text: quotes[Math.floor(Math.random()*quotes.length)], life: 1.2 });
         }
     }
 
-    // 22. 절단 시스템 함수 독립 (버그 수정: 확실하게 인덱스 참조)
+    function applyDamage(amount) {
+        if (isDead) return;
+        hp -= amount;
+        gold += amount * 0.8;
+        if (Math.random() < 0.05) speak();
+        if (Math.random() < 0.03) slicePart();
+        if (hp <= 0) die();
+    }
+
     function slicePart() {
         let targets = doll.parts.filter(p => p.active && p.name !== 'body');
         if (targets.length > 0) {
             let part = targets[Math.floor(Math.random() * targets.length)];
             part.active = false;
-            gold += 100;
             createBlood(doll.x + part.rx, doll.y + part.ry, 40);
-            if(part.name.includes('leg')) doll.angle += 0.8;
-            console.log(part.name + " 절단됨");
         }
-    }
-
-    function applyDamage(amount, isAuto = false) {
-        if (isDead) return;
-        hp -= amount;
-        gold += isAuto ? 0.5 : (amount * 0.5);
-        
-        // 21. 톱니바퀴 피격 시에도 비명 지름
-        if (isAuto && Math.random() < 0.05) speak();
-
-        // 절단 확률 (무기에 따라 다름)
-        let sliceChance = currentWeapon.id === 'knife' ? 0.15 : 0.08;
-        if (!isAuto && Math.random() < sliceChance) slicePart();
-
-        if (hp <= 0) die();
     }
 
     function drawDoll() {
         ctx.save();
         ctx.translate(doll.x, doll.y);
         ctx.rotate(doll.angle);
-        if (!isDead) {
+        if(!isDead) {
             ctx.fillStyle = "white"; ctx.font = "bold 20px Arial"; ctx.textAlign = "center";
             ctx.fillText("형진", 0, -110);
         }
         doll.parts.forEach(p => {
             if (!p.active) return;
-            ctx.fillStyle = isDead ? '#400' : '#e0ac69';
+            ctx.fillStyle = isDead ? '#300' : '#e0ac69';
             ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
             ctx.save();
             ctx.translate(p.rx, p.ry);
-            if(p.angle) ctx.rotate(p.angle + (isDead ? 0 : Math.sin(Date.now()*0.005)*0.3));
             if (p.name === 'head') {
                 ctx.beginPath(); ctx.arc(0, 0, p.r, 0, Math.PI*2); ctx.fill(); ctx.stroke();
             } else {
@@ -150,114 +119,108 @@
         ctx.restore();
     }
 
-    // 20. 유미(고양이) 시스템
-    function drawYumi() {
-        if(!yumi) return;
-        // 인형 주변 배회
-        yumi.targetX = doll.x + Math.sin(Date.now()*0.002)*150;
-        yumi.targetY = doll.y + Math.cos(Date.now()*0.002)*100;
-        yumi.x += (yumi.targetX - yumi.x) * 0.05;
-        yumi.y += (yumi.targetY - yumi.y) * 0.05;
-
-        ctx.fillStyle = "#ffcc00"; // 노란 고양이
-        ctx.font = "30px Arial";
-        ctx.fillText("🐈 유미", yumi.x - 20, yumi.y);
-
-        // 지속 데미지 (할퀴기)
-        if(Math.random() < 0.1 && !isDead) {
-            applyDamage(3, true);
-            createBlood(doll.x, doll.y, 5);
-        }
-    }
-
-    function drawSaws() {
-        saws.forEach(s => {
-            s.angle += 0.2;
-            ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.angle);
-            ctx.fillStyle = '#7f8c8d';
-            for(let i=0; i<8; i++) { ctx.rotate(Math.PI/4); ctx.fillRect(-5, -45, 10, 90); }
-            ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI*2); ctx.fill();
-            ctx.restore();
-
-            let dist = Math.sqrt((s.x - doll.x)**2 + (s.y - doll.y)**2);
-            if(dist < 90 && !isDead) {
-                applyDamage(1.5, true); // 톱니바퀴 자동 데미지
-                doll.vx += (doll.x - s.x) * 0.05;
-            }
-        });
-    }
-
-    // 무기 구매 시스템
-    function buyWeapon(id, price, damage) {
-        if(gold >= price) {
-            gold -= price;
-            currentWeapon = { id, dmg: damage, name: id.toUpperCase() };
-            document.getElementById('cur-weapon').innerText = currentWeapon.name;
-            document.getElementById('btn-'+id).disabled = true;
-            alert(id + " 무기 장착!");
-        }
-    }
-
-    function buyYumi() {
-        if(gold >= 3000 && !yumi) {
-            gold -= 3000;
-            yumi = { x: 0, y: 0 };
-            document.getElementById('btn-yumi').disabled = true;
-            alert("고양이 유미가 형진이를 괴롭히기 시작합니다!");
+    // 24. 무기 추가 시스템 (잡고 움직일 수 있는 객체)
+    function addWeapon(emoji, price, dmg) {
+        if(gold >= price || price === 0) {
+            if(price > 0) gold -= price;
+            weapons.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                emoji: emoji,
+                dmg: dmg,
+                size: 40,
+                angle: 0
+            });
         }
     }
 
     function die() {
         if (isDead) return;
-        isDead = true; hp = 0;
-        document.getElementById('death-msg').style.display = "block";
+        isDead = true;
+        hp = 0;
         createBlood(doll.x, doll.y, 80);
+        // 25. 사망 메시지 삭제 및 1초 후 부활
         setTimeout(() => {
-            isDead = false; hp = maxHp = Math.floor(maxHp * 1.2);
-            doll.parts.forEach(p => p.active = true);
-            doll.x = canvas.width/2; doll.y = 200; doll.angle = 0;
-            document.getElementById('death-msg').style.display = "none";
-        }, 3000);
+            respawn();
+        }, 1000);
+    }
+
+    function respawn() {
+        isDead = false;
+        maxHp = Math.floor(maxHp * 1.15); // 18. 증가율 완화
+        hp = maxHp;
+        doll.parts.forEach(p => p.active = true);
+        doll.x = canvas.width / 2; doll.y = 200;
+        doll.vx = 0; doll.vy = 0; doll.angle = 0;
     }
 
     canvas.addEventListener('mousedown', (e) => {
-        if(isDead) return;
         let mx = e.clientX, my = e.clientY;
-        draggedSaw = saws.find(s => Math.sqrt((mx-s.x)**2 + (my-s.y)**2) < 40);
+        // 무기 잡기 우선 체크
+        draggedObj = weapons.find(w => Math.sqrt((mx-w.x)**2 + (my-w.y)**2) < 40);
         
-        if(!draggedSaw) {
-            let dist = Math.sqrt((mx - doll.x)**2 + (my - doll.y)**2);
-            if(dist < 100) {
-                isDraggingDoll = (currentWeapon.id === 'hand'); // 손일 때만 잡기 가능
-                applyDamage(currentWeapon.dmg);
-                createBlood(mx, my, currentWeapon.id === 'bomb' ? 100 : 20);
-                speak();
+        // 무기가 없으면 인형 잡기
+        if(!draggedObj && !isDead) {
+            if(Math.sqrt((mx-doll.x)**2 + (my-doll.y)**2) < 100) {
+                draggedObj = doll;
             }
         }
     });
 
     window.addEventListener('mousemove', (e) => {
-        if(draggedSaw) { draggedSaw.x = e.clientX; draggedSaw.y = e.clientY; }
-        else if(isDraggingDoll && !isDead) { doll.x = e.clientX; doll.y = e.clientY; }
+        if(draggedObj) {
+            draggedObj.x = e.clientX;
+            draggedObj.y = e.clientY;
+            if(draggedObj === doll) { doll.vx = 0; doll.vy = 0; }
+        }
     });
-    window.addEventListener('mouseup', () => { isDraggingDoll = false; draggedSaw = null; });
 
-    function addSaw() { if(gold >= 300) { gold -= 300; saws.push({x: Math.random()*canvas.width, y: Math.random()*canvas.height, angle:0}); } }
+    window.addEventListener('mouseup', () => { draggedObj = null; });
 
     function render() {
-        ctx.clearRect(0,0,canvas.width, canvas.height);
-        // 물리 업데이트
-        if(!isDraggingDoll) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 23. 인형 도망가기 AI
+        if(!isDead && draggedObj !== doll) {
+            // 무기가 가까이 오면 반대 방향으로 힘을 받음
+            weapons.forEach(w => {
+                let dx = doll.x - w.x;
+                let dy = doll.y - w.y;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+                if(dist < 200) {
+                    doll.vx += (dx / dist) * 0.5; // 도망가는 속도
+                    doll.vy += (dy / dist) * 0.5;
+                }
+            });
+
             doll.x += doll.vx; doll.y += doll.vy;
-            doll.vx *= 0.98; doll.vy *= 0.98; doll.vy += 0.4;
+            doll.vx *= 0.95; doll.vy *= 0.95;
+            doll.vy += 0.3; // 중력
+
             if(doll.x < 50 || doll.x > canvas.width-50) doll.vx *= -0.7;
             if(doll.y > canvas.height-80) { doll.y = canvas.height-80; doll.vy *= -0.3; }
         }
-        
-        drawSaws();
-        drawYumi();
+
+        // 무기 그리기 및 충돌 체크
+        weapons.forEach(w => {
+            ctx.font = "40px Arial";
+            ctx.save();
+            ctx.translate(w.x, w.y);
+            if(w.emoji === '⚙️') { w.angle += 0.1; ctx.rotate(w.angle); }
+            ctx.fillText(w.emoji, -20, 15);
+            ctx.restore();
+
+            // 인형과 충돌 시 데미지
+            let d = Math.sqrt((w.x - doll.x)**2 + (w.y - doll.y)**2);
+            if(d < 80 && !isDead) {
+                applyDamage(w.dmg / 10);
+                if(Math.random() < 0.1) createBlood(doll.x, doll.y, 5);
+            }
+        });
+
         drawDoll();
 
+        // 파티클/텍스트 업데이트
         particles.forEach((p, i) => {
             p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life -= 0.02;
             ctx.fillStyle = `rgba(255,0,0,${p.life})`;
