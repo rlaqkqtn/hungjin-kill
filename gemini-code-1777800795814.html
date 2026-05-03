@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Ragdoll Clicker Game</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #1a1a1a;
+            color: white;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            text-align: center;
+            pointer-events: none;
+            width: 100%;
+        }
+        .stat { font-size: 24px; margin: 5px; font-weight: bold; }
+        #shop {
+            position: absolute;
+            right: 20px;
+            top: 100px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid #444;
+        }
+        button {
+            display: block;
+            width: 100%;
+            margin: 10px 0;
+            padding: 10px;
+            cursor: pointer;
+            background: #444;
+            color: white;
+            border: 1px solid #666;
+        }
+        button:hover { background: #666; }
+        canvas { background: #2c3e50; cursor: crosshair; }
+    </style>
+</head>
+<body>
+
+<div id="ui-layer">
+    <div class="stat">골드: <span id="gold">0</span>G</div>
+    <div class="stat">인형 체력: <span id="hp">100</span> / <span id="max-hp">100</span></div>
+    <div id="level-display">레벨: 1</div>
+</div>
+
+<div id="shop">
+    <h3 style="margin-top:0">상점</h3>
+    <button onclick="buyWeapon()">강한 무기 (가격: 50G)</button>
+    <button onclick="buyTrap()">자동 톱니바퀴 (가격: 200G)</button>
+    <button onclick="changeSkin()">스킨 변경 (가격: 100G)</button>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let gold = 0;
+    let level = 1;
+    let maxHp = 100;
+    let hp = 100;
+    let dmg = 10;
+    let autoDmg = 0;
+    let skinColor = '#e0ac69';
+
+    // 인형 부위 정보 (상대적 위치)
+    let parts = [
+        { name: 'head', x: 0, y: -80, r: 25, active: true, bonus: 50 },
+        { name: 'body', x: 0, y: 0, w: 50, h: 80, active: true, bonus: 0 },
+        { name: 'armL', x: -40, y: -20, w: 15, h: 50, active: true, bonus: 30 },
+        { name: 'armR', x: 40, y: -20, w: 15, h: 50, active: true, bonus: 30 },
+        { name: 'legL', x: -15, y: 70, w: 18, h: 60, active: true, bonus: 30 },
+        { name: 'legR', x: 15, y: 70, w: 18, h: 60, active: true, bonus: 30 }
+    ];
+
+    let dollPos = { x: canvas.width / 2, y: canvas.height / 2 + 50 };
+    let velocity = { x: 0, y: 0 };
+
+    function drawDoll() {
+        ctx.save();
+        ctx.translate(dollPos.x, dollPos.y);
+        
+        parts.forEach(p => {
+            if (!p.active) return;
+            ctx.fillStyle = skinColor;
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+
+            if (p.name === 'head') {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.fill(); ctx.stroke();
+            } else {
+                ctx.fillRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h);
+                ctx.strokeRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h);
+            }
+        });
+        ctx.restore();
+    }
+
+    function update() {
+        // 물리 이동 (받은 피해 비례 날아감)
+        dollPos.x += velocity.x;
+        dollPos.y += velocity.y;
+        velocity.x *= 0.95; // 마찰력
+        velocity.y *= 0.95;
+
+        // 화면 경계 제한
+        if(dollPos.x < 100 || dollPos.x > canvas.width - 100) velocity.x *= -1;
+        if(dollPos.y < 150 || dollPos.y > canvas.height - 150) velocity.y *= -1;
+
+        // 자동 데미지 (톱니바퀴 등)
+        if (autoDmg > 0 && hp > 0) {
+            hp -= autoDmg / 60;
+            if (hp <= 0) die();
+        }
+
+        updateUI();
+    }
+
+    function updateUI() {
+        document.getElementById('gold').innerText = Math.floor(gold);
+        document.getElementById('hp').innerText = Math.ceil(hp);
+        document.getElementById('max-hp').innerText = maxHp;
+        document.getElementById('level-display').innerText = `레벨: ${level}`;
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left - dollPos.x;
+        const my = e.clientY - rect.top - dollPos.y;
+
+        parts.forEach(p => {
+            if (!p.active) return;
+
+            let hit = false;
+            if (p.name === 'head') {
+                const dist = Math.sqrt((mx - p.x) ** 2 + (my - p.y) ** 2);
+                if (dist < p.r) hit = true;
+            } else {
+                if (mx > p.x - p.w/2 && mx < p.x + p.w/2 && my > p.y - p.h/2 && my < p.y + p.h/2) hit = true;
+            }
+
+            if (hit) {
+                applyDamage(p);
+            }
+        });
+    });
+
+    function applyDamage(part) {
+        hp -= dmg;
+        gold += 1;
+        
+        // 날아가는 효과
+        velocity.x += (Math.random() - 0.5) * dmg;
+        velocity.y -= Math.random() * dmg;
+
+        // 부위 절단 확률 (10%)
+        if (part.name !== 'body' && Math.random() < 0.1) {
+            part.active = false;
+            gold += part.bonus;
+            console.log(part.name + " 절단! 보너스 골드!");
+        }
+
+        if (hp <= 0) die();
+    }
+
+    function die() {
+        level++;
+        gold += 100;
+        maxHp = Math.floor(maxHp * 1.5); // 체력 증가
+        hp = maxHp;
+        
+        // 부활 시 부위 재생 및 위치 초기화
+        parts.forEach(p => p.active = true);
+        dollPos = { x: canvas.width / 2, y: canvas.height / 2 + 50 };
+        velocity = { x: 0, y: 0 };
+    }
+
+    // 상점 기능
+    function buyWeapon() {
+        if (gold >= 50) { gold -= 50; dmg += 5; alert("공격력 상승!"); }
+    }
+    function buyTrap() {
+        if (gold >= 200) { gold -= 200; autoDmg += 10; alert("톱니바퀴 설치! 자동 데미지 추가"); }
+    }
+    function changeSkin() {
+        if (gold >= 100) { 
+            gold -= 100; 
+            skinColor = '#' + Math.floor(Math.random()*16777215).toString(16);
+            alert("스킨 변경 완료!"); 
+        }
+    }
+
+    function gameLoop() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        update();
+        drawDoll();
+        requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+</script>
+</body>
+</html>
