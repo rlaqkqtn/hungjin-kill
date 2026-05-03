@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Ragdoll Clicker - Gold Rush & Fix</title>
+    <title>Ragdoll Clicker - Smart Aim Update</title>
     <style>
         body { margin: 0; background-color: #1a1a1b; color: white; font-family: 'Pretendard', sans-serif; overflow: hidden; user-select: none; cursor: none; }
         #custom-cursor { position: fixed; top: 0; left: 0; font-size: 60px; pointer-events: none; z-index: 999; transform: translate(-50%, -50%); }
@@ -11,7 +11,6 @@
         .stat-container { background: rgba(0, 0, 0, 0.85); padding: 15px; border-radius: 12px; border-left: 5px solid #ffcc00; min-width: 250px; }
         .stat { font-size: 28px; margin-bottom: 5px; color: #ffcc00; font-weight: bold; }
         
-        /* 골드러쉬 알림 */
         #gold-rush-notice { color: #ffeb3b; font-size: 18px; font-weight: bold; display: none; animation: blink 0.5s infinite; }
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.2; } 100% { opacity: 1; } }
 
@@ -20,7 +19,7 @@
         #reload-progress { width: 0%; height: 100%; background: #00e676; }
 
         .menu-wrapper { position: absolute; right: 0; top: 0; height: 100vh; display: flex; align-items: center; z-index: 200; cursor: default; }
-        .side-menu { background: rgba(30, 30, 35, 0.98); width: 300px; height: 100vh; padding: 20px; border-left: 2px solid #444; box-sizing: border-box; display: none; overflow-y: auto; }
+        .side-menu { background: rgba(30, 30, 35, 0.98); width: 320px; height: 100vh; padding: 20px; border-left: 2px solid #444; box-sizing: border-box; display: none; overflow-y: auto; }
         .side-menu.active { display: block; }
         .tab-container { display: flex; flex-direction: column; gap: 5px; }
         .menu-toggle { background: #ffcc00; color: #000; padding: 20px 10px; cursor: pointer; border-radius: 10px 0 0 10px; font-weight: bold; writing-mode: vertical-lr; border: none; font-size: 14px; }
@@ -57,11 +56,11 @@
     </div>
     <div id="shop" class="side-menu">
         <button id="moveLock-buy" style="background:#673ab7" onclick="buyFeature('moveLock', 100000000000)">🔒 움직임 고정 구매 (1,000억G)</button>
-        <button id="bleed-buy" style="background:#cc0000;" onclick="buyFeature('bleed', 1000000)">🩸 출혈 효과 구매 (100만G)</button>
+        <button id="bleed-buy" style="background:#cc0000;" onclick="buyFeature('bleed', 5000000)">🩸 출혈 강화 구매 (500만G)</button>
         <hr>
-        <button onclick="buyDoll()" style="background: #ff4444; color: white;">👤 형진이 추가 (500,000G)</button>
+        <button onclick="buyDoll()" style="background: #ff4444; color: white;">👤 형진이 추가 (2,500,000G)</button>
         <button class="remove-btn" onclick="removeDoll()">❌ 마지막 형진이 제거</button>
-        <button onclick="upgradeAtk()">🔥 근력 강화 (<span id="atk-cost">500</span>G)</button>
+        <button onclick="upgradeAtk()">🔥 근력 강화 (<span id="atk-cost">1,000</span>G)</button>
         <div id="shop-items"></div>
     </div>
     <div id="storage" class="side-menu">
@@ -84,11 +83,10 @@
     window.addEventListener('resize', resize);
     resize();
 
-    let gold = 0, atkMultiplier = 1.0, upgradeCost = 500;
+    let gold = 0, atkMultiplier = 1.0, upgradeCost = 1000;
     let floatingTexts = [], bullets = [], particles = [];
     let mouseX = 0, mouseY = 0;
     
-    // 골드러쉬 시스템
     let goldRushActive = false;
     let goldRushTimer = 0;
 
@@ -100,11 +98,12 @@
 
     const weapons = {
         punch: { name: '주먹', emoji: '👊', dmg: 30, price: 0, owned: true },
-        dagger: { name: '단검', emoji: '🗡️', dmg: 150, price: 5000, owned: false },
-        poison: { name: '독극물', emoji: '🧪', dmg: 20, price: 10000, owned: false, isPoison: true },
-        fire: { name: '화염구', emoji: '🔥', dmg: 600, price: 50000, owned: false, isFire: true },
-        bomb: { name: '폭탄', emoji: '💣', dmg: 5000, price: 300000, owned: false, isBomb: true },
-        gun: { name: '권총', emoji: '🔫', dmg: 1200, price: 150000, owned: false, isGun: true }
+        dagger: { name: '단검', emoji: '🗡️', dmg: 150, price: 50000, owned: false },
+        yumi: { name: '유미(조이)', emoji: '🪄', dmg: 400, price: 250000, owned: false },
+        poison: { name: '독극물', emoji: '🧪', dmg: 20, price: 1000000, owned: false, isPoison: true },
+        fire: { name: '화염구', emoji: '🔥', dmg: 1200, price: 5000000, owned: false, isFire: true },
+        gun: { name: '권총(자동조준)', emoji: '🔫', dmg: 3500, price: 25000000, owned: false, isGun: true },
+        bomb: { name: '폭탄', emoji: '💣', dmg: 15000, price: 100000000, owned: false, isBomb: true }
     };
     let currentWeapon = 'punch';
 
@@ -138,21 +137,17 @@
         say(text) { this.speech = text; this.speechTimer = 80; }
 
         update() {
-            // 움직임 고정 로직 수리: options.moveLock이 true이면 물리 계산을 건너뜀
             if (!options.moveLock) {
                 this.vy += 0.8; 
                 this.x += this.vx;
                 this.y += this.vy;
                 this.vx *= 0.98;
                 this.vy *= 0.98;
-
                 if (this.y > canvas.height - 180) { this.y = canvas.height - 180; this.vy *= -0.5; }
                 if (this.y < 120) { this.y = 120; this.vy *= -0.5; }
                 if (this.x < 120) { this.x = 120; this.vx *= -0.5; }
                 if (this.x > canvas.width - 350) { this.x = canvas.width - 350; this.vx *= -0.5; }
-            } else {
-                this.vx = 0; this.vy = 0;
-            }
+            } else { this.vx = 0; this.vy = 0; }
 
             if (this.poisonStacks > 0) { this.hp -= this.poisonStacks * 0.2; this.poisonStacks -= 0.01; }
             if (this.fireTicks > 0) { this.hp -= 5; this.fireTicks--; }
@@ -161,9 +156,9 @@
         }
 
         respawn() {
-            addGold(100000 * this.level);
+            addGold(250000 * this.level);
             this.level++;
-            this.maxHp *= 1.4;
+            this.maxHp *= 1.5;
             this.hp = this.maxHp;
             this.poisonStacks = 0;
             this.fireTicks = 0;
@@ -188,9 +183,6 @@
                 ctx.strokeStyle = "#000";
                 if (p.r) { 
                     ctx.beginPath(); ctx.arc(p.rx, p.ry, p.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-                    ctx.fillStyle = "black";
-                    ctx.beginPath(); ctx.arc(p.rx - 15, p.ry - 10, 4, 0, Math.PI * 2); ctx.arc(p.rx + 15, p.ry - 10, 4, 0, Math.PI * 2); ctx.fill();
-                    ctx.beginPath(); ctx.arc(p.rx, p.ry + 10, 15, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke();
                 } else {
                     ctx.fillRect(p.rx - p.w/2, p.ry - p.h/2, p.w, p.h); ctx.strokeRect(p.rx - p.w/2, p.ry - p.h/2, p.w, p.h);
                 }
@@ -204,16 +196,12 @@
     function addGold(amount) {
         let multiplier = goldRushActive ? 10 : 1;
         gold += amount * multiplier;
-        
-        // 1% 확률로 골드러쉬 발생
-        if (!goldRushActive && Math.random() < 0.01) {
-            startGoldRush();
-        }
+        if (!goldRushActive && Math.random() < 0.01) startGoldRush();
     }
 
     function startGoldRush() {
         goldRushActive = true;
-        goldRushTimer = 500; // 약 8초
+        goldRushTimer = 500;
         document.getElementById('gold-rush-notice').style.display = 'block';
     }
 
@@ -235,52 +223,65 @@
     }
 
     function buyDoll() {
-        if (gold >= 500000) {
-            gold -= 500000;
+        if (gold >= 2500000) {
+            gold -= 2500000;
             dolls.push(new Doll());
             document.getElementById('doll-count').innerText = dolls.length;
         }
     }
 
-    function removeDoll() {
-        if (dolls.length > 1) {
-            dolls.pop();
-            document.getElementById('doll-count').innerText = dolls.length;
-        } else {
-            alert("최소 한 명의 형진이는 남겨둬야 합니다!");
-        }
-    }
+    function removeDoll() { if (dolls.length > 1) { dolls.pop(); document.getElementById('doll-count').innerText = dolls.length; } }
 
     function spawnBlood(x, y) {
         if (!options.bleed) return;
-        for(let i=0; i<5; i++) {
-            particles.push({ x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, size: Math.random()*4+2, life: 1, color: "#cc0000" });
+        const bloodCount = 20; 
+        for(let i=0; i<bloodCount; i++) {
+            particles.push({ x, y, vx: (Math.random()-0.5)*18, vy: (Math.random()-0.5)*18, size: Math.random()*10+5, life: 1, color: "#990000" });
         }
     }
 
     function explode(x, y) {
-        for(let i=0; i<30; i++) {
-            particles.push({ x, y, vx: (Math.random()-0.5)*30, vy: (Math.random()-0.5)*30, size: Math.random()*15+5, life: 1, color: Math.random() > 0.5 ? "#ffcc00" : "#ff4400" });
+        for(let i=0; i<50; i++) {
+            particles.push({ x, y, vx: (Math.random()-0.5)*40, vy: (Math.random()-0.5)*40, size: Math.random()*20+10, life: 1, color: Math.random() > 0.5 ? "#ffcc00" : "#ff4400" });
         }
         dolls.forEach(d => {
             const dist = Math.hypot(d.x - x, d.y - y);
-            if (dist < 400) {
-                applyDamage(d, weapons.bomb.dmg * ((400-dist)/400), d.x, d.y, false);
-                d.say("콰광!!!");
-            }
+            if (dist < 500) { applyDamage(d, weapons.bomb.dmg, d.x, d.y, true); }
         });
     }
 
     canvas.addEventListener('mousedown', (e) => {
         if (e.clientX > canvas.width - 320) return;
         if (currentWeapon === 'bomb') { explode(mouseX, mouseY); return; }
+        
+        // 권총 자동 조준 로직
         if (currentWeapon === 'gun') {
             if (isReloading || currentAmmo <= 0) { reloadGun(); return; }
-            currentAmmo--;
-            document.getElementById('ammo-count').innerText = currentAmmo;
-            bullets.push({ x: mouseX, y: mouseY, vx: 60, vy: (Math.random()-0.5)*5, dmg: weapons.gun.dmg });
+            
+            // 가장 가까운 형진이 찾기
+            let target = null;
+            let minDist = Infinity;
+            dolls.forEach(d => {
+                const dist = Math.hypot(d.x - mouseX, d.y - mouseY);
+                if (dist < minDist) { minDist = dist; target = d; }
+            });
+
+            if (target) {
+                currentAmmo--;
+                document.getElementById('ammo-count').innerText = currentAmmo;
+                
+                // 타겟 방향 계산
+                const angle = Math.atan2(target.y - mouseY, target.x - mouseX);
+                bullets.push({ 
+                    x: mouseX, y: mouseY, 
+                    vx: Math.cos(angle) * 70, 
+                    vy: Math.sin(angle) * 70, 
+                    dmg: weapons.gun.dmg 
+                });
+            }
             return;
         }
+
         dolls.forEach(d => {
             for (let k in d.parts) {
                 const p = d.parts[k];
@@ -298,8 +299,8 @@
         targetDoll.hp -= finalDmg;
         addGold(finalDmg * 15);
         if (!options.moveLock) {
-            targetDoll.vx += (targetDoll.x - x) * 0.2;
-            targetDoll.vy += (targetDoll.y - y) * 0.2;
+            targetDoll.vx += (targetDoll.x - x) * 0.25;
+            targetDoll.vy += (targetDoll.y - y) * 0.25;
         }
         if (blood) spawnBlood(x, y);
         floatingTexts.push({ x, y, text: `+${Math.floor(finalDmg*15*(goldRushActive?10:1))}`, color: goldRushActive ? "#fff700" : "#ffcc00", life: 1 });
@@ -327,7 +328,7 @@
 
     function upgradeAtk() {
         if (gold >= upgradeCost) {
-            gold -= upgradeCost; atkMultiplier += 1.2; upgradeCost *= 2.8;
+            gold -= upgradeCost; atkMultiplier += 1.5; upgradeCost *= 3.2;
             document.getElementById('atk-cost').innerText = Math.floor(upgradeCost).toLocaleString();
         }
     }
@@ -344,7 +345,7 @@
                 document.getElementById('reload-bar').style.display = 'none';
                 document.getElementById('ammo-count').innerText = currentAmmo;
             }
-        }, 80);
+        }, 120);
     }
 
     function draw() {
@@ -357,7 +358,7 @@
             }
         }
         particles.forEach((p, i) => {
-            p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life -= 0.02;
+            p.x += p.vx; p.y += p.vy; p.vy += 0.3; p.life -= 0.015;
             ctx.globalAlpha = p.life; ctx.fillStyle = p.color;
             ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
             if(p.life <= 0) particles.splice(i, 1);
@@ -370,7 +371,7 @@
             dolls.forEach(d => {
                 if (Math.hypot(b.x - d.x, b.y - d.y) < 100) { applyDamage(d, b.dmg, b.x, b.y); bullets.splice(i, 1); }
             });
-            if(b.x > canvas.width) bullets.splice(i, 1);
+            if(b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) bullets.splice(i, 1);
         });
         floatingTexts.forEach((t, i) => {
             ctx.fillStyle = t.color; ctx.font = "bold 20px Arial";
